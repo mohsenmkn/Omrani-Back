@@ -1,0 +1,20 @@
+{
+    "Project": true,
+    "Auth": true,
+    "Task": true,
+    "Warehouse": true,
+    "Financial": true,
+    "HR": true,
+    "Equipment": true,
+    "Contracts": true,
+    "PettyCash": true,
+    "Invoice": true,
+    "User": true,
+    "Acl": true,
+    "Company": true,
+    "WBS": true,
+    "Contract": true,
+    "Budget": true,
+    "Document": true,
+    "Dashboard": true
+}
