@@ -93,18 +93,26 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'gtarabar' => [
+            'driver'   => 'sqlsrv',
+            'host'     => env('GTARABAR_HOST', '127.0.0.1'),
+            'port'     => env('GTARABAR_PORT', '1433'),
+            'database' => env('GTARABAR_DATABASE', 'Gtarabar'),
+            'username' => env('GTARABAR_USERNAME', 'Karimi_read'),
+            'password' => env('GTARABAR_PASSWORD', ''),
+            'charset'  => 'utf8',
+            'prefix'   => '',
+            'collation' => 'Persian_100_CI_AI_SC',
+            'options'  => [
+                PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
+                PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
+                'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
+                'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
+            ],
+        ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Migration Repository Table
-    |--------------------------------------------------------------------------
-    |
-    | This table keeps track of all the migrations that have already run for
-    | your application. Using this information, we can determine which of
-    | the migrations on disk haven't actually been run in the database.
-    |
-    */
+
 
     'migrations' => 'migrations',
 

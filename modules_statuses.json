@@ -16,5 +16,6 @@
     "Contract": true,
     "Budget": true,
     "Document": true,
-    "Dashboard": true
+    "Dashboard": true,
+    "Payroll": true
 }
