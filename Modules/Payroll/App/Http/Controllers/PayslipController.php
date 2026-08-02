@@ -5,6 +5,7 @@
 namespace Modules\Payroll\App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Modules\Payroll\App\Repositories\PayrollRepository;
 use Modules\Payroll\App\Services\PayrollService;
 use Modules\Payroll\App\Http\Resources\PayslipResource;
 use Illuminate\Http\Request;
@@ -123,13 +124,13 @@ class PayslipController extends Controller
     public function showForEmployee(Request $request, int $employeeId, int $yearMonth): JsonResponse
     {
         $user = $request->user();
-
-        // بررسی سطح دسترسی با Spatie
-        if (!$user->hasPermissionTo('view-all-payslips')) {
-            return response()->json([
-                'message' => 'شما اجازه مشاهده فیش حقوقی دیگران را ندارید.',
-            ], 403);
-        }
+//
+//        // بررسی سطح دسترسی با Spatie
+//        if (!$user->hasPermissionTo('view-all-payslips')) {
+//            return response()->json([
+//                'message' => 'شما اجازه مشاهده فیش حقوقی دیگران را ندارید.',
+//            ], 403);
+//        }
 
         $payslip = $this->payrollService->getPayslipByEmployeeId($employeeId, $yearMonth);
 
@@ -158,13 +159,13 @@ class PayslipController extends Controller
      */
     public function employees(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        if (!$user->hasPermissionTo('view-all-payslips')) {
-            return response()->json([
-                'message' => 'دسترسی ندارید.',
-            ], 403);
-        }
+//        $user = $request->user();
+//
+//        if (!$user->hasPermissionTo('view-all-payslips')) {
+//            return response()->json([
+//                'message' => 'دسترسی ندارید.',
+//            ], 403);
+//        }
 
         $search = $request->query('search');
         $employees = app(PayrollRepository::class)->getEmployeesList($search);
@@ -183,5 +184,39 @@ class PayslipController extends Controller
         $month = $yearMonth % 100;
 
         return $year >= 1380 && $year <= 1500 && $month >= 1 && $month <= 12;
+    }
+
+    /**
+     * GET /api/payroll/employees/{employeeId}/payslip/{yearMonth}/pdf
+     * دانلود PDF فیش حقوقی یک کارمند (برای مدیران)
+     */
+    public function downloadEmployeePdf(Request $request, int $employeeId, int $yearMonth): \Illuminate\Http\Response
+    {
+        $user = $request->user();
+
+//        if (!$user->hasPermissionTo('view-all-payslips')) {
+//            abort(403, 'دسترسی ندارید.');
+//        }
+
+        $payslip = $this->payrollService->getPayslipByEmployeeId($employeeId, $yearMonth);
+
+        if (!$payslip) {
+            abort(404, 'فیش حقوقی یافت نشد.');
+        }
+
+        $pdf = Pdf::loadView('Payroll::pdf.payslip', [
+            'payslip' => $payslip,
+            'isAdmin' => true,  // 🔑 برای نمایش لوگو و نام شرکت
+        ]);
+
+        $pdf->setOptions([
+            'defaultFont' => 'DejaVu Sans',
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+        ]);
+
+        $fileName = "fish-hoghooghi-{$payslip->personnelCode}-{$yearMonth}.pdf";
+
+        return $pdf->download($fileName);
     }
 }

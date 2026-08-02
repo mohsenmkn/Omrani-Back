@@ -1,6 +1,5 @@
 <?php
 
-
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
@@ -47,6 +46,15 @@ class RoleSeeder extends Seeder
                 str_contains($permission->name, '.view');
         });
         $viewer->syncPermissions($viewerPermissions);
+
+        // ✅ 5. نقش Employee (پرسنل عادی: فقط داشبورد و مشاهده فیش حقوقی)
+        $employee = Role::firstOrCreate(['name' => 'employee', 'guard_name' => $guard]);
+        $employeePermissions = $allPermissions->filter(function ($permission) {
+            return $permission->name === 'dashboard.view' ||
+                $permission->name === 'Payroll.view';
+        });
+        $employee->syncPermissions($employeePermissions);
+
+        $this->command->info('✅ نقش‌ها و دسترسی‌ها با موفقیت به‌روزرسانی شدند.');
     }
 }
-

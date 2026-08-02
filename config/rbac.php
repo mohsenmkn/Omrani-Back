@@ -1,5 +1,10 @@
 <?php
 
+
+/* Read me: First-->add Primision in file rbac.php
+            Secend->run php artisan db:seed --class=PermissionSeeder
+            & php artisan db:seed --class=Roleseeder
+*/
 return [
     'guard' => 'web',
 
@@ -24,6 +29,9 @@ return [
         'stock'=>['view', 'create', 'update', 'delete'],
         'low-stock'=>['view', 'create', 'update', 'delete'],
         'consumption'=>['view'],
+        'AdminPayroll'=>['view'],
+        'Payroll'=>['view'],
+
     ],
     'labels' => [
         // ماژول‌ها (برای دسته‌بندی در UI)
@@ -48,6 +56,8 @@ return [
             'stock'=>'گزارش موجودی',
             'low-stock'=>'گزارش موجودی کم',
             'consumption'=>'گزارش مصرف',
+            'AdminPayroll'=>'مدیر فیش حقوقی',
+            'Payroll'=>'فیش حقوقی',
         ],
 
         // اکشن‌های عمومی و اختصاصی
