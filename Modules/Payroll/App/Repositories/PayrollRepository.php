@@ -51,7 +51,7 @@ class PayrollRepository
     /**
      * دریافت اقلام فیش حقوقی
      */
-    // Modules/Payroll/App/Repositories/PayrollRepository.php
+
 
     public function getPayslipItems(int $employeeId, int $yearMonth): array
     {
@@ -70,7 +70,6 @@ class PayrollRepository
 
                 CASE
                     WHEN CF.Name IN ('UF461', 'UF462', 'UF454') THEN pci.Value / 60.0
-                    WHEN CF.Name = 'UF636' THEN -pci.Value  -- 🔑 منفی کردن سهام جهان فولاد
                     ELSE pci.Value
                 END AS Amount,
 
@@ -82,8 +81,7 @@ class PayrollRepository
                         'Tax',
                         'kasremoaveghe',
                         'LoanSum',
-                        'TaxGov',
-                        'UF636'  -- 🔑 اضافه شد
+                        'TaxGov'
                     ) THEN N'کسورات'
                     ELSE N'مزایا'
                 END AS Category
@@ -102,8 +100,7 @@ class PayrollRepository
                 'ManagePAy', 'sakhtikar', 'UF520', 'UF533', 'ExtraworkPay', 'tatilkari',
                 'beinerahi', 'ayabzahab', 'UF541', 'EmployeeMainInsurance', 'Tax',
                 'kasremoaveghe', 'LoanSum', 'BonusSum', 'DeductSum', 'NetPay',
-                'Effectwork', 'UF461', 'UF462', 'UF454',
-                'UF636'  --  اضافه شد
+                'Effectwork', 'UF461', 'UF462', 'UF454'
               )
             ORDER BY
                 CASE CF.Name
@@ -122,7 +119,6 @@ class PayrollRepository
                     WHEN 'kasremoaveghe' THEN 42
                     WHEN 'LoanSum' THEN 43
                     WHEN 'TaxGov' THEN 44
-                    WHEN 'UF636' THEN 45  -- 🔑 اضافه شد
                     WHEN 'DeductSum' THEN 50
                     WHEN 'NetPay' THEN 60 ELSE 99
                 END
@@ -133,11 +129,10 @@ class PayrollRepository
     /**
      * دریافت خلاصه فیش حقوقی (فقط جمع‌ها)
      */
-// Modules/Payroll/App/Repositories/PayrollRepository.php
 
     public function getPayslipSummary(int $employeeId, int $yearMonth): ?object
     {
-        return DB::connection($this->connection)->selectOne("
+        return DB::connection('gtarabar')->selectOne("
         SELECT
             E.Code AS PersonnelCode,
             P.FullName AS EmployeeName,
@@ -148,9 +143,8 @@ class PayrollRepository
             SUM(CASE WHEN CF.Name = 'BonusSum' THEN pci.Value ELSE 0 END) AS TotalBenefits,
             SUM(
                 CASE
-                    WHEN CF.Name IN ('EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov')
+                    WHEN CF.Name IN ('EmployeeMainInsurance', 'kasremoaveghe', 'LoanSum', 'TaxGov')
                     THEN pci.Value
-                    WHEN CF.Name = 'UF636' THEN -pci.Value  -- 🔑 منفی کردن
                     ELSE 0
                 END
             ) AS TotalDeductions,
@@ -163,8 +157,7 @@ class PayrollRepository
         WHERE pc.IssueYearMonth = ?
           AND E.EmployeeID = ?
           AND CF.Name IN ('Effectwork', 'BonusSum', 'DeductSum', 'NetPay',
-                          'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov',
-                          'UF636')  -- 🔑 اضافه شد
+                          'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov')
         GROUP BY E.Code, P.FullName, P.NationalID, P.FatherName, pc.IssueYearMonth
     ", [$yearMonth, $employeeId]);
     }

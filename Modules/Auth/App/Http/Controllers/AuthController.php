@@ -86,34 +86,42 @@ class AuthController extends Controller
         ]);
 
         try {
-            $this->authService->verifyOtp($request->mobile, $request->otp);
-            return response()->json(['message' => 'کد با موفقیت تایید شد.'], 200);
-        } catch (ValidationException $e) {
-            return response()->json(['message' => $e->errors()['otp'][0]], 400);
+            $user = $this->authService->verifyOtp($request->mobile, $request->otp);
+
+            return response()->json([
+                'message' => 'کد با موفقیت تایید شد.',
+                'user' => [
+                    'mobile' => $user->mobile,
+                    'name' => $user->name
+                ]
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['message' => $e->errors()['otp'][0] ?? 'کد تایید نامعتبر است.'], 400);
         }
     }
 
     public function resetPassword(Request $request)
     {
+        // ✅ اضافه کردن 'otp' به ولیدیشن برای جلوگیری از خطای null
         $request->validate([
             'mobile' => 'required|exists:users,mobile',
-            'otp' => 'required|string|size:5', // اضافه کردن OTP برای امنیت بیشتر
+            'otp' => 'required|string|size:5', // <-- این خط حیاتی است
             'password' => 'required|string|min:6|confirmed',
         ]);
 
         try {
-            // ابتدا OTP را مجدداً بررسی می‌کنیم تا از امنیت تغییر رمز اطمینان حاصل شود
+            // 1. ابتدا OTP را مجدداً بررسی می‌کنیم (امنیت)
             $user = $this->authService->verifyOtp($request->mobile, $request->otp);
 
-            // تغییر رمز عبور
+            // 2. تغییر رمز عبور
             $this->authService->resetPassword($user, $request->password);
 
             return response()->json(['message' => 'رمز عبور با موفقیت تغییر کرد.'], 200);
-        } catch (ValidationException $e) {
-            return response()->json(['message' => $e->errors()['otp'][0] ?? 'خطا در اعتبارسنجی'], 400);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['message' => $e->errors()['otp'][0] ?? 'کد تایید نامعتبر یا منقضی شده است.'], 400);
         } catch (\Exception $e) {
             Log::error('Reset Password Error: ' . $e->getMessage());
-            return response()->json(['message' => 'خطا در تغییر رمز عبور.'], 500);
+            return response()->json(['message' => 'خطا در تغییر رمز عبور. لطفاً مجدداً تلاش کنید.'], 500);
         }
     }
 
