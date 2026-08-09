@@ -64,8 +64,21 @@ class AuthController extends Controller
     public function sendOtp(Request $request)
     {
         $request->validate([
-            'mobile' => 'required|string|exists:users,mobile'
+            'mobile' => 'required|regex:/^09\d{9}$/'
         ]);
+
+        // جستجو یا ایجاد کاربر
+        $result = $this->authService->findOrCreateUser($request->mobile);
+
+        if (!$result['found']) {
+            return response()->json([
+                'message' => 'کاربری با این شماره موبایل در سیستم یافت نشد.',
+                'can_register' => false
+            ], 404);
+        }
+
+        /** @var User $user */
+        $user = $result['user'];
 
         try {
             $result = $this->authService->sendOtp($request->mobile);

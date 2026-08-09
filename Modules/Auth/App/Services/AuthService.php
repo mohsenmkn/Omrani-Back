@@ -274,10 +274,15 @@ class AuthService
      */
     private function createUserFromGtarabar(object $employee): User
     {
+        $email = trim((string) ($employee->Email ?? ''));
+
+        if ($email === '') {
+            $email = null;
+        }
         return User::create([
             'name' => $employee->FullName,
             'mobile' => $employee->Mobile,
-            'email' => $employee->Email ?? null,
+            'email' => $email,
             'national_code' => $employee->NationalID ?? null,
             'personnel_code' => $employee->PersonnelCode,
             'password' => Hash::make(Str::random(16)),
