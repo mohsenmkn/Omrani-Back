@@ -8,27 +8,59 @@ use Modules\Dashboard\App\Http\Models\Announcement;
 
 class DashboardController extends Controller
 {
+
+
     /**
-     * دریافت خلاصه فیش حقوقی کاربر
+     * دریافت اطلاعات کامل داشبورد (پروفایل + فیش + اعلانات)
      */
-    public function getPayslipSummary(Request $request)
+//    public function getDashboardData(Request $request)
+//    {
+//        $user = $request->user();
+//
+//        // 1. اطلاعات پروفایل و شغلی
+//        $profile = $user->getDashboardProfile();
+//
+//        // 2. آخرین فیش حقوقی
+//        $months = $user->getAvailablePayslipMonths();
+//        $latestMonth = $months[0] ?? null;
+//        $latestPayslip = null;
+//
+//        if ($latestMonth) {
+//            $latestPayslip = $user->getPayslipSummary($latestMonth);
+//        }
+//
+//        return response()->json([
+//            'profile' => $profile,
+//            'latest_payslip' => $latestPayslip,
+//            'latest_month' => $latestMonth,
+//            'roles' => $user->getRoleNames()->values(),
+//            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
+//        ]);
+//    }
+    public function getDashboardData(Request $request)
     {
         $user = $request->user();
 
+        // 1. اطلاعات پروفایل و شغلی (شامل اطلاعات مرخصی)
+        $profile = $user->getDashboardProfile();
+
+        // 2. آخرین فیش حقوقی
         $months = $user->getAvailablePayslipMonths();
         $latestMonth = $months[0] ?? null;
-        $payslip = null;
+        $latestPayslip = null;
 
         if ($latestMonth) {
-            $payslip = $user->getPayslipSummary($latestMonth);
+            $latestPayslip = $user->getPayslipSummary($latestMonth);
         }
 
         return response()->json([
-            'payslip' => $payslip,
-            'month' => $latestMonth,
+            'profile' => $profile,
+            'latest_payslip' => $latestPayslip,
+            'latest_month' => $latestMonth,
+            'roles' => $user->getRoleNames()->values(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
         ]);
     }
-
     /**
      * دریافت اعلانات
      */
@@ -73,6 +105,27 @@ class DashboardController extends Controller
 
         return response()->json([
             'message' => 'اعلان به عنوان خوانده‌شده علامت‌گذاری شد.',
+        ]);
+    }
+
+    /**
+     * دریافت خلاصه فیش حقوقی (برای backward compatibility)
+     */
+    public function getPayslipSummary(Request $request)
+    {
+        $user = $request->user();
+
+        $months = $user->getAvailablePayslipMonths();
+        $latestMonth = $months[0] ?? null;
+        $payslip = null;
+
+        if ($latestMonth) {
+            $payslip = $user->getPayslipSummary($latestMonth);
+        }
+
+        return response()->json([
+            'payslip' => $payslip,
+            'month' => $latestMonth,
         ]);
     }
 }

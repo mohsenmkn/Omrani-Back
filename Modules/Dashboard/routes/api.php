@@ -7,4 +7,5 @@ Route::prefix('v1/dashboard')->middleware('auth:sanctum')->group(function () {
     Route::get('/payslip-summary', [DashboardController::class, 'getPayslipSummary']);
     Route::get('/announcements', [DashboardController::class, 'getAnnouncements']);
     Route::post('/announcements/{id}/read', [DashboardController::class, 'markAsRead']);
+    Route::get('/data', [DashboardController::class, 'getDashboardData']);
 });

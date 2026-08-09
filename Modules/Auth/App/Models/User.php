@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Document\App\Models\Document;
 use Modules\PettyCash\App\Models\PettyCash;
@@ -247,6 +248,331 @@ class User extends Authenticatable
             GROUP BY E.Code, P.FullName, P.NationalID, pc.IssueYearMonth
         ", [$yearMonth, $this->personnel_code]);
     }
+
+    /**
+     * دریافت آخرین حکم کارگزینی (سمت و شغل) از گستراب
+     */
+//    public function getEmployeeStatute(): ?object
+//    {
+//        $employee = $this->getGtarabarEmployee();
+//        if (!$employee) {
+//            return null;
+//        }
+//
+//        try {
+//            return DB::connection('gtarabar')->selectOne("
+//            SELECT TOP 1
+//                es.EmployeeStatuteID,
+//                es.EmployeeRef,
+//                es.PostRef,
+//                p.Code AS PostCode,
+//                p.Title AS PostTitle,
+//                es.JobRef,
+//                j.Code AS JobCode,
+//                j.Title AS JobTitle,
+//                es.OrganizationalStructureRef
+//            FROM HCM3.EmployeeStatute es
+//            LEFT JOIN HCM3.Post p ON p.PostID = es.PostRef
+//            LEFT JOIN HCM3.Job j ON j.JobID = es.JobRef
+//            INNER JOIN HCM3.Employee e ON e.EmployeeID = es.EmployeeRef
+//            WHERE e.Code = ?
+//            ORDER BY es.EmployeeStatuteID DESC
+//        ", [$this->personnel_code]);
+//        } catch (\Exception $e) {
+//            Log::error('Error fetching Employee Statute: ' . $e->getMessage());
+//            return null;
+//        }
+//    }
+
+    /**
+     * دریافت اطلاعات کامل پرسنل برای داشبورد
+     */
+//    public function getDashboardProfile(): array
+//    {
+//        $employee = $this->getGtarabarEmployee();
+//        $statute = $this->getEmployeeStatute();
+//
+//        return [
+//            'id' => $this->id,
+//            'name' => $this->name,
+//            'mobile' => $this->mobile,
+//            'email' => $this->email,
+//            'personnel_code' => $this->personnel_code,
+//            'national_code' => $this->national_code,
+//            'employee_id' => $employee?->EmployeeID,
+//            'employment_number' => $employee?->EmploymentNumber,
+//            'post' => [
+//                'code' => $statute?->PostCode,
+//                'title' => $statute?->PostTitle,
+//            ],
+//            'job' => [
+//                'code' => $statute?->JobCode,
+//                'title' => $statute?->JobTitle,
+//            ],
+//        ];
+//    }
+
+
+
+
+
+    /**
+     * دریافت مانده مرخصی استحقاقی از گستراب
+     * Value در جدول LeaveRemainder به دقیقه است (480 دقیقه = 1 روز کاری)
+     */
+    public function getLeaveRemainder(): array
+    {
+        $employee = $this->getGtarabarEmployee();
+        if (!$employee) {
+            return [];
+        }
+
+        try {
+            // دریافت آخرین مانده مرخصی استحقاقی (LeaveTypeRef = 1)
+            $remainder = DB::connection('gtarabar')
+                ->table('HCM3.LeaveRemainder AS lr')
+                ->join('HCM3.LeaveType AS lt', 'lt.LeaveTypeID', '=', 'lr.LeaveTypeRef')
+                ->where('lr.EmployeeRef', $employee->EmployeeID)
+                ->where('lr.LeaveTypeRef', 1) // مرخصی استحقاقی
+                ->where('lr.IsInactive', 0)
+                ->select(
+                    'lt.Title AS LeaveTypeName',
+                    'lr.EffectiveYearMonth',
+                    'lr.Value AS RemainderMinutes',
+                    DB::raw('CAST(lr.Value AS FLOAT) / 480.0 AS RemainderDays'),
+                    'lr.EffectiveDate'
+                )
+                ->orderBy('lr.EffectiveYearMonth', 'desc')
+                ->first();
+
+            if (!$remainder) {
+                return [];
+            }
+
+            // استخراج سال و ماه از EffectiveYearMonth (فرمت YYYYMM)
+            $year = (int) floor($remainder->EffectiveYearMonth / 100);
+            $month = $remainder->EffectiveYearMonth % 100;
+
+            $persianMonths = [
+                1 => 'فروردین', 2 => 'اردیبهشت', 3 => 'خرداد', 4 => 'تیر',
+                5 => 'مرداد', 6 => 'شهریور', 7 => 'مهر', 8 => 'آبان',
+                9 => 'آذر', 10 => 'دی', 11 => 'بهمن', 12 => 'اسفند'
+            ];
+
+            return [
+                'leave_type' => $remainder->LeaveTypeName,
+                'year' => $year,
+                'month' => $month,
+                'month_name' => $persianMonths[$month] ?? '',
+                'remainder_minutes' => (int) $remainder->RemainderMinutes,
+                'remainder_days' => round((float) $remainder->RemainderDays, 2),
+                'effective_date' => $remainder->EffectiveDate,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error fetching Leave Remainder: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * دریافت مرخصی‌های استفاده شده در ماه جاری شمسی
+     */
+    public function getUsedLeavesCurrentMonth(): array
+    {
+        $employee = $this->getGtarabarEmployee();
+        if (!$employee) {
+            return [];
+        }
+
+        try {
+            // تاریخ شروع و پایان ماه جاری شمسی (مرداد 1405)
+            // مرداد 1405 ≈ 23 جولای 2026 تا 22 آگوست 2026
+            $startDate = '2026-07-23 00:00:00';
+            $endDate = '2026-08-22 23:59:59';
+
+            $usedLeaves = DB::connection('gtarabar')
+                ->table('HCM3.LeaveRequest AS lr')
+                ->join('HCM3.LeaveType AS lt', 'lt.LeaveTypeID', '=', 'lr.LeaveTypeRef')
+                ->where('lr.EmployeeRef', $employee->EmployeeID)
+                ->whereBetween('lr.FromDateTime', [$startDate, $endDate])
+                ->where('lr.Status', 10) // 10 = تایید شده
+                ->select(
+                    'lr.LeaveRequestID',
+                    'lr.RequestNumber',
+                    'lt.Title AS LeaveTypeName',
+                    'lr.FromDateTime',
+                    'lr.ToDateTime',
+                    'lr.IsDaily',
+                    'lr.Status',
+                    'lr.Reason',
+                    DB::raw('DATEDIFF(minute, lr.FromDateTime, lr.ToDateTime) AS DurationMinutes'),
+                    DB::raw('CASE WHEN lr.IsDaily = 1 THEN DATEDIFF(day, lr.FromDateTime, lr.ToDateTime) + 1 ELSE 0 END AS DaysCount')
+                )
+                ->orderBy('lr.FromDateTime', 'desc')
+                ->get()
+                ->toArray();
+
+            return $usedLeaves;
+        } catch (\Exception $e) {
+            Log::error('Error fetching Used Leaves: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * دریافت مجموع روزهای مرخصی استفاده شده در ماه جاری شمسی
+     */
+    public function getTotalUsedLeavesCurrentMonth(): int
+    {
+        $employee = $this->getGtarabarEmployee();
+        if (!$employee) {
+            return 0;
+        }
+
+        try {
+            // مرداد 1405
+            $startDate = '2026-07-23 00:00:00';
+            $endDate = '2026-08-22 23:59:59';
+
+            $total = DB::connection('gtarabar')
+                ->table('HCM3.LeaveRequest AS lr')
+                ->where('lr.EmployeeRef', $employee->EmployeeID)
+                ->whereBetween('lr.FromDateTime', [$startDate, $endDate])
+                ->where('lr.Status', 10)
+                ->selectRaw('SUM(CASE WHEN lr.IsDaily = 1 THEN DATEDIFF(day, lr.FromDateTime, lr.ToDateTime) + 1 ELSE 0 END) AS TotalDays')
+                ->value('TotalDays');
+
+            return (int) ($total ?? 0);
+        } catch (\Exception $e) {
+            Log::error('Error fetching Total Used Leaves: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * دریافت مجموع روزهای مرخصی استفاده شده در سال جاری شمسی
+     */
+    public function getTotalUsedLeavesCurrentYear(): int
+    {
+        $employee = $this->getGtarabarEmployee();
+        if (!$employee) {
+            return 0;
+        }
+
+        try {
+            // سال 1405 شمسی: 21 مارس 2026 تا 20 مارس 2027
+            $startDate = '2026-03-21 00:00:00';
+            $endDate = '2027-03-20 23:59:59';
+
+            $total = DB::connection('gtarabar')
+                ->table('HCM3.LeaveRequest AS lr')
+                ->where('lr.EmployeeRef', $employee->EmployeeID)
+                ->whereBetween('lr.FromDateTime', [$startDate, $endDate])
+                ->where('lr.Status', 10)
+                ->selectRaw('SUM(CASE WHEN lr.IsDaily = 1 THEN DATEDIFF(day, lr.FromDateTime, lr.ToDateTime) + 1 ELSE 0 END) AS TotalDays')
+                ->value('TotalDays');
+
+            return (int) ($total ?? 0);
+        } catch (\Exception $e) {
+            Log::error('Error fetching Total Used Leaves Year: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * دریافت اطلاعات کامل مرخصی برای داشبورد
+     */
+    public function getLeaveDashboardData(): array
+    {
+        $remainder = $this->getLeaveRemainder();
+        $usedLeaves = $this->getUsedLeavesCurrentMonth();
+        $totalUsedThisMonth = $this->getTotalUsedLeavesCurrentMonth();
+        $totalUsedThisYear = $this->getTotalUsedLeavesCurrentYear();
+
+        // محاسبه کل مرخصی استحقاقی (مانده + استفاده شده)
+        $totalEntitled = ($remainder['remainder_days'] ?? 0) + $totalUsedThisYear;
+
+        return [
+            'remainder' => $remainder,
+            'used_leaves_current_month' => $usedLeaves,
+            'summary' => [
+                'total_remainder_days' => $remainder['remainder_days'] ?? 0,
+                'total_entitled_days' => round($totalEntitled, 2),
+                'total_used_days_year' => $totalUsedThisYear,
+                'used_days_this_month' => $totalUsedThisMonth,
+            ]
+        ];
+    }
+
+    /**
+     * به‌روزرسانی متد getDashboardProfile برای شامل شدن اطلاعات مرخصی
+     */
+    public function getEmployeeStatute(): ?object
+    {
+        $employee = $this->getGtarabarEmployee();
+        if (!$employee) {
+            return null;
+        }
+
+        try {
+            return DB::connection('gtarabar')->selectOne("
+            SELECT TOP 1
+                es.EmployeeStatuteID,
+                es.EmployeeRef,
+                es.PostRef,
+                p.Code AS PostCode,
+                p.Title AS PostTitle,
+                es.JobRef,
+                j.Code AS JobCode,
+                j.Title AS JobTitle,
+                es.OrganizationalStructureRef
+            FROM HCM3.EmployeeStatute es
+            LEFT JOIN HCM3.Post p ON p.PostID = es.PostRef
+            LEFT JOIN HCM3.Job j ON j.JobID = es.JobRef
+            INNER JOIN HCM3.Employee e ON e.EmployeeID = es.EmployeeRef
+            WHERE e.Code = ?
+            ORDER BY es.EmployeeStatuteID DESC
+        ", [$this->personnel_code]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching Employee Statute: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * دریافت اطلاعات کامل پروفایل برای داشبورد
+     */
+    public function getDashboardProfile(): array
+    {
+        $employee = $this->getGtarabarEmployee();
+        $statute = $this->getEmployeeStatute();
+        $leaveData = $this->getLeaveDashboardData();
+
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'mobile' => $this->mobile,
+            'email' => $this->email,
+            'personnel_code' => $this->personnel_code,
+            'national_code' => $this->national_code,
+            'employee_id' => $employee?->EmployeeID,
+            'employment_number' => $employee?->EmploymentNumber,
+            'post' => [
+                'code' => $statute?->PostCode,
+                'title' => $statute?->PostTitle,
+            ],
+            'job' => [
+                'code' => $statute?->JobCode,
+                'title' => $statute?->JobTitle,
+            ],
+            'leave' => $leaveData,
+        ];
+    }
+
+
+
+
+
 
 
 
