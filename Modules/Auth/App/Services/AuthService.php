@@ -176,12 +176,13 @@ class AuthService
 
             // بررسی是否存在 کاربر با این personnel_code
             $existingUser = User::where('personnel_code', $gtarabarEmployee->PersonnelCode)->first();
-
+            $email = trim((string) ($employee->Email ?? ''));
+            $email = $email === '' ? null : $email;
             if ($existingUser) {
                 $existingUser->update([
                     'mobile' => $mobile,
                     'name' => $gtarabarEmployee->FullName,
-                    'email' => $gtarabarEmployee->Email ?? $existingUser->email,
+                    'email' => $email,
                     'national_code' => $gtarabarEmployee->NationalID ?? $existingUser->national_code,
                 ]);
 
