@@ -80,7 +80,6 @@ class PayrollRepository
                             'Tax',
                             'kasremoaveghe',
                             'LoanSum',
-                            'TaxGov',
                             'UF636'
                         ) THEN N'کسورات'
                         ELSE N'مزایا'
@@ -110,7 +109,7 @@ class PayrollRepository
                     'UF541',
 
                     -- کسورات
-                    'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov', 'UF636',
+                    'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'UF636',
 
                     -- جمع‌ها
                     'BonusSum', 'DeductSum', 'NetPay',
