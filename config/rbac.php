@@ -31,6 +31,7 @@ return [
         'consumption'=>['view'],
         'AdminPayroll'=>['view'],
         'Payroll'=>['view'],
+        'AdminHr'=>['view'],
 
     ],
     'labels' => [
@@ -58,6 +59,7 @@ return [
             'consumption'=>'گزارش مصرف',
             'AdminPayroll'=>'مدیر فیش حقوقی',
             'Payroll'=>'فیش حقوقی',
+            'AdminHr'=>'مدیریت کنترل تردد',
         ],
 
         // اکشن‌های عمومی و اختصاصی

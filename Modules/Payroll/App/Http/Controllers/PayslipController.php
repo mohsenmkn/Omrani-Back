@@ -49,6 +49,12 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
+        if (!$user->hasPermissionTo('permission:Payroll.view')){
+            return response()->json([
+                'message' => 'دسترسی ندارید.',
+            ], 403);
+        }
+
         if (empty($user->personnel_code)) {
             return response()->json([
                 'message' => 'کد پرسنلی برای حساب کاربری شما تعریف نشده است.',
@@ -124,13 +130,12 @@ class PayslipController extends Controller
     public function showForEmployee(Request $request, int $employeeId, int $yearMonth): JsonResponse
     {
         $user = $request->user();
-//
-//        // بررسی سطح دسترسی با Spatie
-//        if (!$user->hasPermissionTo('view-all-payslips')) {
-//            return response()->json([
-//                'message' => 'شما اجازه مشاهده فیش حقوقی دیگران را ندارید.',
-//            ], 403);
-//        }
+
+        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+            return response()->json([
+                'message' => 'دسترسی ندارید.',
+            ], 403);
+        }
 
         $payslip = $this->payrollService->getPayslipByEmployeeId($employeeId, $yearMonth);
 
@@ -159,13 +164,13 @@ class PayslipController extends Controller
      */
     public function employees(Request $request): JsonResponse
     {
-//        $user = $request->user();
-//
-//        if (!$user->hasPermissionTo('view-all-payslips')) {
-//            return response()->json([
-//                'message' => 'دسترسی ندارید.',
-//            ], 403);
-//        }
+        $user = $request->user();
+
+        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+            return response()->json([
+                'message' => 'دسترسی ندارید.',
+            ], 403);
+        }
 
         $search = $request->query('search');
         $employees = app(PayrollRepository::class)->getEmployeesList($search);
@@ -194,9 +199,11 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
-//        if (!$user->hasPermissionTo('view-all-payslips')) {
-//            abort(403, 'دسترسی ندارید.');
-//        }
+        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+            return response()->json([
+                'message' => 'دسترسی ندارید.',
+            ], 403);
+        }
 
         $payslip = $this->payrollService->getPayslipByEmployeeId($employeeId, $yearMonth);
 

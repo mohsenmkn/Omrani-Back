@@ -110,6 +110,24 @@ return [
                 'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
             ],
         ],
+
+        'kasra' => [
+            'driver'   => 'sqlsrv',
+            'host'     => env('KASRA_HOST', 'KASRA\KASRAPLUS'),
+            'port'     => env('KASRA_PORT', ''),
+            'database' => env('KASRA_DATABASE', 'framework'),
+            'username' => env('KASRA_USERNAME', 'readonly_user'),
+            'password' => env('KASRA_PASSWORD', '2951402Fat@@'),
+            'charset'  => 'utf8',
+            'prefix'   => '',
+            'collation' => 'Persian_100_CI_AI_SC',
+            'options'  => [
+                PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
+                PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
+                'TrustServerCertificate' => true,
+            ],
+        ],
+
     ],
 
 
