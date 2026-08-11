@@ -49,7 +49,7 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermissionTo('permission:Payroll.view')){
+        if (!$user->hasPermissionTo('Payroll.view')){
             return response()->json([
                 'message' => 'دسترسی ندارید.',
             ], 403);
@@ -131,7 +131,7 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+        if (!$user->hasPermissionTo('AdminPayroll.view')){
             return response()->json([
                 'message' => 'دسترسی ندارید.',
             ], 403);
@@ -166,7 +166,7 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+        if (!$user->hasPermissionTo('AdminPayroll.view')){
             return response()->json([
                 'message' => 'دسترسی ندارید.',
             ], 403);
@@ -199,7 +199,7 @@ class PayslipController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermissionTo('permission:AdminPayroll.view')){
+        if (!$user->hasPermissionTo('AdminPayroll.view')){
             return response()->json([
                 'message' => 'دسترسی ندارید.',
             ], 403);

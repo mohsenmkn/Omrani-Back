@@ -60,16 +60,7 @@ class AttendanceController extends Controller
         ]);
     }
 
-    /**
-     * 🔑 GET /api/attendance/employees/{personnelCode}/daily
-     * جزئیات روزانه تردد یک کارمند
-     */
 
-
-    /**
-     * GET /api/attendance/employees/{personnelCode}/summary
-     * خلاصه تردد یک کارمند (route موجود شما)
-     */
     public function summaryForEmployee(Request $request, string $personnelCode): JsonResponse
     {
         $user = $request->user();
