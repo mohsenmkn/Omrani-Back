@@ -93,7 +93,7 @@ class AttendanceController extends Controller
      */
     public function dailyAttendance(Request $request, string $personnelCode): JsonResponse
     {
-        if (!$request->user()->can('AdminPayroll.view')) {
+        if (!$request->user()->can('AdminHr.view')) {
             return response()->json(['message' => 'دسترسی ندارید.'], 403);
         }
 
