@@ -18,5 +18,6 @@
     "Document": true,
     "Dashboard": true,
     "Payroll": true,
-    "Attendance": true
+    "Attendance": true,
+    "Library": true
 }

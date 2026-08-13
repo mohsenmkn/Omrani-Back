@@ -32,6 +32,9 @@ return [
         'AdminPayroll'=>['view'],
         'Payroll'=>['view'],
         'AdminHr'=>['view'],
+        'librarybooks'=>['view','manage'],
+        'libraryreservations'=>['view','manage','create'],
+        'librarystatistics'=>['view'],
 
     ],
     'labels' => [
@@ -60,6 +63,10 @@ return [
             'AdminPayroll'=>'مدیر فیش حقوقی',
             'Payroll'=>'فیش حقوقی',
             'AdminHr'=>'مدیریت کنترل تردد',
+            'librarybooks'=>'مدیریت کتاب ها',
+            'libraryreservations'=>'مدیریت رزروها',
+            'librarystatistics'=>'مشاهده کتابخانه'
+
         ],
 
         // اکشن‌های عمومی و اختصاصی

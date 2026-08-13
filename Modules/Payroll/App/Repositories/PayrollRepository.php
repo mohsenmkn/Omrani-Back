@@ -194,7 +194,7 @@ class PayrollRepository
                 SUM(CASE WHEN CF.Name = 'BonusSum' THEN pci.Value ELSE 0 END) AS TotalBenefits,
                 SUM(
                     CASE
-                        WHEN CF.Name IN ('EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov')
+                        WHEN CF.Name IN ('EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum')
                         THEN pci.Value
                         WHEN CF.Name = 'UF636' THEN -pci.Value
                         ELSE 0
@@ -210,9 +210,7 @@ class PayrollRepository
               AND E.EmployeeID = ?
               AND CF.Name IN (
                 'Effectwork', 'BonusSum', 'DeductSum', 'NetPay',
-                'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'TaxGov',
-                'UF636'
-              )
+                'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum','UF636')
             GROUP BY E.Code, P.FullName, P.NationalID, P.FatherName, pc.IssueYearMonth
         ", [$yearMonth, $employeeId]);
     }

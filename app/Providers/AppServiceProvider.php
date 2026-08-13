@@ -19,6 +19,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+//        $this->commands([
+//            \Modules\Library\App\Console\Commands\SendManualNotification::class,
+//            \Modules\Library\App\Console\Commands\SendDueReminders::class,
+//            \Modules\Library\App\Console\Commands\ExpirePendingReservations::class,
+//        ]);
     }
 }
