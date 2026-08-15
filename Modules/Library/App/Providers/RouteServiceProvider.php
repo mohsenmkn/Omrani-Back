@@ -57,4 +57,5 @@ class RouteServiceProvider extends ServiceProvider
             ->group(module_path('Library', '/routes/api.php'));
 
     }
+
 }

@@ -24,7 +24,7 @@ $app->singleton(
 
 $app->singleton(
     Illuminate\Contracts\Console\Kernel::class,
-    Modules\Library\App\Console\Kernel::class
+    Modules\Library\App\Console\Kernel::class,
 );
 
 $app->singleton(

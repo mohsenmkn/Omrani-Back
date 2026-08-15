@@ -33,7 +33,7 @@ return [
     'msgway' => [
         'api_key' => env('MSGWAY_API_KEY'),
         'provider' => env('MSGWAY_PROVIDER', 1747285713),
-        'template_id_default' => env('MSGWAY_TEMPLATE_ID_DEFAULT', 16860),
+        'template_id_default' => env('MSGWAY_TEMPLATE_ID_DEFAULT', 23490),
         'template_id_approval' => env('MSGWAY_TEMPLATE_ID_APPROVAL'),
         'template_id_reminder' => env('MSGWAY_TEMPLATE_ID_REMINDER'),
         'template_id_overdue' => env('MSGWAY_TEMPLATE_ID_OVERDUE'),

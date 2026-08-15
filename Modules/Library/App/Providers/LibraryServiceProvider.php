@@ -4,6 +4,7 @@ namespace Modules\Library\App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Route;
 
 class LibraryServiceProvider extends ServiceProvider
 {
@@ -22,6 +23,8 @@ class LibraryServiceProvider extends ServiceProvider
     {
         $this->registerCommands();
         $this->registerSchedule();
+        $this->registerRoutes();
+
     }
 
     /**
@@ -58,5 +61,19 @@ class LibraryServiceProvider extends ServiceProvider
                 ->withoutOverlapping()
                 ->appendOutputTo(storage_path('logs/library-cron.log'));
         });
+    }
+
+    /**
+     * 🔑 ثبت روت‌های ماژول
+     */
+    private function registerRoutes(): void
+    {
+        $routesPath = base_path('Modules/Library/routes/api.php');
+
+        if (file_exists($routesPath)) {
+            Route::prefix('api/v1')  // 🔑 تغییر از 'api' به 'api/v1'
+            ->middleware('api')
+                ->group($routesPath);
+        }
     }
 }

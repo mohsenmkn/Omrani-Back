@@ -32,6 +32,7 @@ return [
         'AdminPayroll'=>['view'],
         'Payroll'=>['view'],
         'AdminHr'=>['view'],
+        'library'=>['view'],
         'librarybooks'=>['view','manage'],
         'libraryreservations'=>['view','manage','create'],
         'librarystatistics'=>['view'],
@@ -65,7 +66,9 @@ return [
             'AdminHr'=>'مدیریت کنترل تردد',
             'librarybooks'=>'مدیریت کتاب ها',
             'libraryreservations'=>'مدیریت رزروها',
-            'librarystatistics'=>'مشاهده کتابخانه'
+            'librarystatistics'=>'مشاهده داشبورد کتابخانه',
+            'library'=>'مشاهده کتابخانه'
+
 
         ],
 

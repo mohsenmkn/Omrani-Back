@@ -134,7 +134,6 @@ class BookController extends Controller
     }
 
 
-    // Modules/Library/App/Http/Controllers/BookController.php
 
     /**
      * POST /api/library/admin/books/{id}/copies
