@@ -7,16 +7,21 @@ use Modules\Library\App\Repositories\ReservationRepository;
 use Modules\Library\App\Repositories\CategoryRepository;
 use Modules\Library\App\Models\Setting;
 use Modules\Library\App\Models\Reservation;
+use Modules\Library\App\Services\Sms\SmsManager;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 class LibraryService
 {
+    private SmsManager $smsManager;
     public function __construct(
         private BookRepository $bookRepo,
         private ReservationRepository $reservationRepo,
         private CategoryRepository $categoryRepo,
-    ) {}
+        SmsManager $smsManager
+    ) {
+        $this->smsManager = $smsManager;
+    }
 
     // ========== کتاب‌ها ==========
 

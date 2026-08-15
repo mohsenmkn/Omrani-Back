@@ -4,6 +4,7 @@ namespace Modules\Library\App\Services\Sms;
 
 use Modules\Library\App\Models\Notification;
 use Modules\Library\App\Models\Reservation;
+use Morilog\Jalali\Jalalian;
 use Carbon\Carbon;
 
 class SmsManager
@@ -63,8 +64,8 @@ class SmsManager
     {
         $user = $reservation->user;
         $bookTitle = $reservation->bookCopy->book->title;
-        $pickupDate = $reservation->expected_pickup_date->format('Y/m/d');
-
+        //$pickupDate = $reservation->expected_pickup_date->format('Y/m/d');
+        $pickupDate = $this->toShamsi($reservation->expected_pickup_date);
         // اگر برای این حالت هم الگوی جداگانه دارید، پارامترها را اینجا تنظیم کنید
         $templateParams = [
             $user->name,
@@ -85,8 +86,10 @@ class SmsManager
     {
         $user = $reservation->user;
         $bookTitle = $reservation->bookCopy->book->title;
-        $pickupDate = $reservation->expected_pickup_date->format('Y/m/d');
-        $dueDate = $reservation->expected_return_date->format('Y/m/d');
+        //$pickupDate = $reservation->expected_pickup_date->format('Y/m/d');
+        //$dueDate = $reservation->expected_return_date->format('Y/m/d');
+        $pickupDate = $this->toShamsi($reservation->expected_pickup_date);
+        $dueDate = $this->toShamsi($reservation->expected_return_date);
 
         $templateParams = [
             $bookTitle,   // [param1]
@@ -114,11 +117,22 @@ class SmsManager
             return false;
         }
 
-        // دریافت Template ID از کانفیگ (اختیاری: اگر برای هر نوع پیامک الگوی جدا دارید)
-        $templateId = config('services.msgway.template_id_' . $type);
+        if ($type !== null) {
+            if ($type === 'approval') {
+                $result = $this->smsService->sendPattern(
+                    $user->mobile,
+                    $templateParams,
+                    23490
+                );
+            } elseif ($type === 'pending') {
+                $result = $this->smsService->sendPattern(
+                    $user->mobile,
+                    $templateParams,
+                    23492
+                );
+            }
+        }
 
-        // ارسال پیامک
-        $result = $this->smsService->sendPattern($user->mobile, $templateParams, 23490);
 
         // ثبت در دیتابیس
         Notification::create([
@@ -131,6 +145,22 @@ class SmsManager
             'is_read' => false,
         ]);
         return $result['success'];
+    }
+
+
+    /**
+     * 🔑 helper برای تبدیل تاریخ میلادی به شمسی با فرمت 1405/05/20
+     */
+    private function toShamsi($date): string
+    {
+        if (!$date) return '-';
+
+        // اگر رشته بود، به Carbon تبدیل کن
+        if (is_string($date)) {
+            $date = Carbon::parse($date);
+        }
+
+        return Jalalian::fromDateTime($date)->format('Y/m/d');
     }
 
 
