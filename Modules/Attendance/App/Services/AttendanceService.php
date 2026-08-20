@@ -231,15 +231,11 @@ class AttendanceService
     }
 
     /**
-     * 🔑 دریافت جزئیات روزانه یک کارمند
-     */
-    /**
-     *  دریافت جزئیات روزانه + خلاصه ماه
+     * دریافت جزئیات روزانه + خلاصه ماه + پانچ‌های ورود/خروج
      */
     public function getDailyAttendance(string $personnelCode, string $month = ''): array
     {
         $personId = $this->repository->findPersonIdByCode($personnelCode);
-
         if (!$personId) {
             return [];
         }
@@ -247,7 +243,12 @@ class AttendanceService
         $targetMonth = $month ?: $this->getCurrentShamsiMonth();
         $prevMonth = $this->getPreviousMonth($targetMonth);
 
+        // ۱. دریافت داده‌های روزانه از DailyResult
         $dailyData = $this->repository->getDailyAttendance($personId, $targetMonth, $prevMonth);
+
+        // ۲. ✅ دریافت پانچ‌های ورود/خروج از جدول Attendance
+        $punches = $this->repository->getPunches($personId, $targetMonth);
+        $punchesMap = $this->calculateDailyPunches($punches);
 
         // فیلتر فقط ماه مورد نظر
         $filteredData = collect($dailyData)
@@ -255,7 +256,7 @@ class AttendanceService
             ->values()
             ->toArray();
 
-        // 🔑 محاسبه خلاصه برای همان ماه
+        // محاسبه خلاصه
         $summary = $this->buildSummary(
             $personnelCode,
             $this->repository->getEmployeeName($personId) ?? '',
@@ -264,16 +265,26 @@ class AttendanceService
             $filteredData
         );
 
-        // تبدیل داده‌های روزانه
-        $dailyRows = collect($filteredData)->map(function ($day) {
+        // تبدیل داده‌های روزانه با ادغام پانچ‌ها
+        $dailyRows = collect($filteredData)->map(function ($day) use ($punchesMap) {
             $overtimeMinutes = ($day->NormalOvertimeMinutes ?? 0) + ($day->HolidayOvertimeMinutes ?? 0);
+
+            // ✅ دریافت اطلاعات پانچ برای این روز
+            $punchInfo = $punchesMap[$day->date] ?? [
+                'first_time'  => '--:--',
+                'last_time'   => '--:--',
+                'punch_count' => 0,
+            ];
 
             return [
                 'date' => $day->date,
                 'weekday' => $this->getWeekdayName($day->date),
-                'first_time' => $this->formatTime($day->FirstTime ?? null),
-                'last_time' => $this->formatTime($day->LastTime ?? null),
-                'punch_count' => $day->PunchCount ?? 0,
+
+                // ✅ ورود و خروج از پانچ‌ها (نه از فیلدهای ناموجود)
+                'first_time'   => $punchInfo['first_time'],
+                'last_time'    => $punchInfo['last_time'],
+                'punch_count'  => $punchInfo['punch_count'],
+
                 'status' => $this->getStatusPersian($day->StatusType),
                 'required_minutes' => $day->RequiredMinutes ?? 0,
                 'required_formatted' => $this->formatMinutes($day->RequiredMinutes ?? 0),
@@ -296,7 +307,6 @@ class AttendanceService
             ];
         })->toArray();
 
-        // 🔑 برگرداندن هر دو: خلاصه + جزئیات
         return [
             'summary' => $summary->toArray(),
             'daily' => $dailyRows,
@@ -545,4 +555,52 @@ class AttendanceService
 
         return sprintf('%04d-%02d-%02d', $gy, $gm, $gd);
     }
+
+    /**
+     * محاسبه ورود/خروج روزانه از پانچ‌ها
+     *
+     * منطق: پانچ‌ها به ترتیب زمان مرتب می‌شوند
+     * - پانچ اول  = ورود اول  (first_time)
+     * - پانچ آخر  = خروج آخر   (last_time)
+     */
+    private function calculateDailyPunches(array $punches): array
+    {
+        $grouped = collect($punches)->groupBy('Date');
+        $result = [];
+
+        foreach ($grouped as $date => $dayPunches) {
+            $sorted = $dayPunches->sortBy('Time')->values();
+            $count  = $sorted->count();
+
+            // پانچ اول = ورود اول
+            $firstTime = $count > 0
+                ? $this->convertMinutesToTime((int) $sorted[0]->Time)
+                : '--:--';
+
+            // پانچ آخر = خروج آخر
+            $lastTime = $count > 1
+                ? $this->convertMinutesToTime((int) $sorted[$count - 1]->Time)
+                : '--:--';
+
+            $result[$date] = [
+                'first_time'  => $firstTime,
+                'last_time'   => $lastTime,
+                'punch_count' => $count,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * تبدیل دقیقه از نیمه‌شب به فرمت HH:MM
+     * مثال: 380 → 06:20
+     */
+    private function convertMinutesToTime(int $minutes): string
+    {
+        $hours = intdiv($minutes, 60);
+        $mins  = $minutes % 60;
+        return sprintf('%02d:%02d', $hours, $mins);
+    }
+
 }

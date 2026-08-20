@@ -180,4 +180,22 @@ class AttendanceRepository
         ORDER BY MonthKey DESC
     ", [$personId]);
     }
+
+    /**
+     * دریافت پانچ‌های ورود/خروج یک کارمند برای یک ماه
+     */
+    public function getPunches(int $personId, string $month): array
+    {
+        return DB::connection($this->connection)->select("
+        SELECT
+            Date,
+            Time,
+            CardKhanNo
+        FROM [framework].[Att].[Attendance]
+        WHERE PersonelID = ?
+          AND Date LIKE ?
+          AND ISNULL(Deleted, 0) = 0
+        ORDER BY Date ASC, Time ASC
+    ", [$personId, $month . '%']);
+    }
 }

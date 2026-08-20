@@ -19,5 +19,6 @@
     "Dashboard": true,
     "Payroll": true,
     "Attendance": true,
-    "Library": true
+    "Library": true,
+    "Complaint": true
 }

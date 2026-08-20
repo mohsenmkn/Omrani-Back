@@ -17,8 +17,10 @@ return new class extends Migration
                 'reminder',      // یادآوری سررسید
                 'overdue',       // اخطار تاخیر
                 'approval',      // تایید رزرو
-                'ready'          // آماده تحویل
-            ]);
+                'ready',         // آماده تحویل
+                'pending',       // 🔑 اضافه شد: در انتظار تایید
+                'cancelled',     // 🔑 اضافه شد: لغو شده
+            ])->default('pending');
 
             $table->text('message');
             $table->string('mobile', 20)->nullable(); // شماره موبایل مقصد

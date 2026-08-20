@@ -36,6 +36,10 @@ return [
         'librarybooks'=>['view','manage'],
         'libraryreservations'=>['view','manage','create'],
         'librarystatistics'=>['view'],
+        'complaints' => ['read', 'create', 'update', 'delete', 'manage', 'reply', 'export'],
+        'complaintcategories' => ['read', 'create', 'update', 'delete'],
+        'complaintstatistics' => ['view'],
+        'hr' => ['view', 'manage'],
 
     ],
     'labels' => [
@@ -67,7 +71,11 @@ return [
             'librarybooks'=>'مدیریت کتاب ها',
             'libraryreservations'=>'مدیریت رزروها',
             'librarystatistics'=>'مشاهده داشبورد کتابخانه',
-            'library'=>'مشاهده کتابخانه'
+            'library'=>'مشاهده کتابخانه',
+            'complaints' => 'شکایات، انتقادات و پیشنهادات',
+            'complaintcategories' => 'دسته‌بندی شکایات',
+            'complaintstatistics' => 'داشبورد آماری شکایات',
+            'hr'=>'مبنابع انسانی'
 
 
         ],
@@ -84,6 +92,7 @@ return [
             'export'     => 'خروجی اکسل',
             'approve'    => 'تایید نهایی',
             'send'       => 'ارسال',
+            'reply'      => 'پاسخ به شکایت',
         ],
     ]
 

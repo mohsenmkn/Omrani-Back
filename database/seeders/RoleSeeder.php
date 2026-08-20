@@ -48,7 +48,7 @@ class RoleSeeder extends Seeder
         $viewer->syncPermissions($viewerPermissions);
 
         // ✅ 5. نقش Employee (پرسنل عادی: فقط داشبورد و مشاهده فیش حقوقی)
-        $employee = Role::firstOrCreate(['name' => 'employee', 'guard_name' => $guard]);
+        $employee = Role::firstOrCreate(['name' => 'پرسنل', 'guard_name' => $guard]);
         $employeePermissions = $allPermissions->filter(function ($permission) {
             return $permission->name === 'dashboard.view' ||
                 $permission->name === 'Payroll.view';

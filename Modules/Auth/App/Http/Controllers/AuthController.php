@@ -13,6 +13,7 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\PermissionRegistrar;
+use Modules\HR\App\Jobs\SyncUserPositionJob;
 
 class AuthController extends Controller
 {
@@ -55,6 +56,7 @@ class AuthController extends Controller
                 'token' => $result['token'],
                 'user' => $result['user']
             ]);
+            dispatch(new SyncUserPositionJob($user))->afterResponse();
         } catch (ValidationException $e) {
             RateLimiter::hit($throttleKey, 300);
             return response()->json(['message' => $e->errors()['mobile'][0]], 401);

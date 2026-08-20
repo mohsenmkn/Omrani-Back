@@ -69,6 +69,28 @@ class Kernel extends HttpKernel
         'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
         'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
     ];
+    protected function schedule(Schedule $schedule): void
+    {
+        // ✅ sync کامل HR هر ۱۵ دقیقه
+        $schedule->command('gtarabar:sync')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->runInBackground()
+            ->onFailure(function (\Throwable $e) {
+                \Log::error("Scheduled gtarabar:sync failed: {$e->getMessage()}");
+            });
+
+        // ✅ گزارش وضعیت روزانه (اختیاری)
+        $schedule->command('gtarabar:status')
+            ->dailyAt('08:00')
+            ->appendOutputTo(storage_path('logs/hr-sync-status.log'));
+    }
+
+    protected function commands(): void
+    {
+        $this->load(__DIR__ . '/Commands');
+        require base_path('routes/console.php');
+    }
 
 
 

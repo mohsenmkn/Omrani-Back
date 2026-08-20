@@ -174,7 +174,7 @@ class AuthService
                 ];
             }
 
-            // بررسی是否存在 کاربر با این personnel_code
+            // بررسی کاربر با این personnel_code
             $existingUser = User::where('personnel_code', $gtarabarEmployee->PersonnelCode)->first();
             $email = trim((string) ($employee->Email ?? ''));
             $email = $email === '' ? null : $email;
@@ -226,9 +226,9 @@ class AuthService
      */
     private function assignDefaultRole(User $user): void
     {
-        $employeeRole = Role::where('name', 'employee')->first();
+        $employeeRole = Role::where('name', 'پرسنل')->first();
 
-        if ($employeeRole && !$user->hasRole('employee')) {
+        if ($employeeRole && !$user->hasRole('پرسنل')) {
             $user->assignRole($employeeRole);
             Log::info("Role 'employee' assigned to user: {$user->mobile}");
         }
@@ -239,7 +239,7 @@ class AuthService
      */
     private function ensureEmployeeRole(User $user): void
     {
-        if (!$user->hasRole('employee')) {
+        if (!$user->hasRole('پرسنل')) {
             $this->assignDefaultRole($user);
         }
     }
