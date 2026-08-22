@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\HR\App\Http\Controllers\EmployeeController;
 use Modules\HR\App\Http\Controllers\OrgChartController;
+use Modules\HR\App\Http\Controllers\OrgStructureController;
 
 /*
     |--------------------------------------------------------------------------
@@ -108,6 +109,36 @@ Route::middleware(['auth:sanctum'])->prefix('v1/hr')->name('hr.')->group(functio
         ->name('employees.attendance');
 
 
+// ── مدیریت ساختار سازمانی (فقط ادمین) ──
+    Route::get('/org-structure', [OrgStructureController::class, 'index'])
+        ->middleware('permission:hr.manage')
+        ->name('org-structure.index');
+
+//    Route::put('/org-structure/{unit}', [OrgStructureController::class, 'updateParent'])
+//        ->middleware('permission:hr.manage')
+//        ->whereNumber('unit')
+//        ->name('org-structure.update');
+
+    Route::post('/org-structure/reset', [OrgStructureController::class, 'reset'])
+        ->middleware('permission:hr.manage')
+        ->name('org-structure.reset');
+
+    // ✅ ایجاد واحد جدید
+    Route::post('/org-structure', [OrgStructureController::class, 'store'])
+        ->middleware('permission:hr.manage')
+        ->name('org-structure.store');
+
+// ✅ ویرایش واحد
+    Route::put('/org-structure/{unit}', [OrgStructureController::class, 'update'])
+        ->middleware('permission:hr.manage')
+        ->whereNumber('unit')
+        ->name('org-structure.update');
+
+// ✅ حذف واحد
+    Route::delete('/org-structure/{unit}', [OrgStructureController::class, 'destroy'])
+        ->middleware('permission:hr.manage')
+        ->whereNumber('unit')
+        ->name('org-structure.destroy');
 
     // ─────────────────────────────────────────────
     //  🔮 آینده — لیست پرسنل

@@ -17,11 +17,15 @@ class OrganizationalUnit extends Model
         'level',
         'is_active',
         'synced_at',
+        'is_custom',
+        'sort_order',
+        'description',
     ];
 
     protected $casts = [
         'synced_at' => 'datetime',
         'is_active' => 'boolean',
+        'is_custom' => 'boolean',
     ];
 
     // ── سلسله مراتب ──────────────────────────
