@@ -84,6 +84,15 @@ class Kernel extends HttpKernel
         $schedule->command('gtarabar:status')
             ->dailyAt('08:00')
             ->appendOutputTo(storage_path('logs/hr-sync-status.log'));
+
+        // ✅ sync روزانه آموزش پرسنل (افزودی)
+        $schedule->command('training:sync-all --months=6 --delay=100')
+            ->dailyAt('02:00')
+            ->withoutOverlapping()
+            ->runInBackground()
+            ->onFailure(function (\Throwable $e) {
+                \Log::error("Scheduled training sync failed: {$e->getMessage()}");
+            });
     }
 
     protected function commands(): void

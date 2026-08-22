@@ -16,7 +16,9 @@
         "mews/captcha": "^3.4",
         "morilog/jalali": "^3.5",
         "nwidart/laravel-modules": "^10.0",
-        "spatie/laravel-permission": "^6.25"
+        "spatie/laravel-permission": "^6.25",
+        "ext-libxml": "*",
+        "ext-simplexml": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",

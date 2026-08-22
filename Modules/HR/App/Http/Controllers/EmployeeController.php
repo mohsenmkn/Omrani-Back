@@ -5,7 +5,9 @@ namespace Modules\HR\App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\HR\App\Models\EmployeeTraining;
 use Modules\HR\App\Services\EmployeeService;
+use Modules\HR\App\Services\TrainingSyncService;
 
 class EmployeeController extends Controller
 {
@@ -120,6 +122,65 @@ class EmployeeController extends Controller
         }
 
         return response()->json($data);
+    }
+
+    /**
+     * GET /api/v1/hr/employees/{user}/training
+     * لیست دوره‌های آموزشی کارمند
+     */
+    public function training(int $user): JsonResponse
+    {
+        $trainings = EmployeeTraining::where('user_id', $user)
+            ->orderByDesc('synced_at')
+            ->orderByDesc('performance_hours')
+            ->get()
+            ->map(function ($t) {
+                return [
+                    'id'                => $t->id,
+                    'course_code'       => $t->course_code,
+                    'course_title'      => $t->course_title,
+                    'deputy'            => $t->deputy,
+                    'management'        => $t->management,
+                    'post_title'        => $t->post_title,
+                    'session_duration'  => $t->session_duration,
+                    'session_hours'     => round($t->session_hours, 2),
+                    'performance_hours' => (float) $t->performance_hours,
+                    'status'            => $t->status_title,
+                    'status_severity'   => $t->status_severity,
+                    'synced_at'         => $t->synced_at?->format('Y-m-d H:i'),
+                ];
+            });
+
+        // آمار کلی
+        $totalHours = $trainings->sum('performance_hours');
+        $totalCourses = $trainings->count();
+
+        return response()->json([
+            'trainings' => $trainings,
+            'summary'   => [
+                'total_courses'    => $totalCourses,
+                'total_hours'      => round($totalHours, 2),
+                'completed_count'  => $trainings->where('status', 'تکمیل شده')->count(),
+                'in_progress_count'=> $trainings->where('status', 'در حال برگزاری')->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/v1/hr/employees/{user}/training/sync
+     * sync دستی آموزش‌های یک کاربر
+     */
+    public function syncTraining(int $user): JsonResponse
+    {
+        $userModel = \Modules\Auth\App\Models\User::findOrFail($user);
+
+        $syncService = app(TrainingSyncService::class);
+        $count = $syncService->syncUser($userModel, false);
+
+        return response()->json([
+            'message' => "sync با موفقیت انجام شد. {$count} دوره همگام‌سازی شد.",
+            'synced_count' => $count,
+        ]);
     }
 
 

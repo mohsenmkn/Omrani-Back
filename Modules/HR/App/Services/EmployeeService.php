@@ -9,6 +9,7 @@ use Modules\Auth\App\Models\User;
 use Modules\HR\App\Models\EmployeePosition;
 use Modules\HR\App\Models\EmployeeRelative;
 use Modules\HR\App\Models\EmployeeStatuteHistory;
+use Modules\HR\App\Models\EmployeeTraining;
 
 class EmployeeService
 {
@@ -293,6 +294,31 @@ class EmployeeService
                     'expiry_date'    => $h->expiry_date?->format('Y-m-d'),
                     'statute_number' => $h->statute_number,
                     'is_current'     => $h->is_current,
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * اطلاعات آموزش پرسنل (برای پروفایل)
+     */
+    public function getEmployeeTraining(int $userId): array
+    {
+        return EmployeeTraining::where('user_id', $userId)
+            ->orderByDesc('synced_at')
+            ->get()
+            ->map(function ($t) {
+                return [
+                    'course_code'       => $t->course_code,
+                    'course_title'      => $t->course_title,
+                    'deputy'            => $t->deputy,
+                    'management'        => $t->management,
+                    'post_title'        => $t->post_title,
+                    'session_duration'  => $t->session_duration,
+                    'session_hours'     => round($t->session_hours, 2),
+                    'performance_hours' => (float) $t->performance_hours,
+                    'status_title'      => $t->status_title,
+                    'status_severity'   => $t->status_severity,
                 ];
             })
             ->toArray();

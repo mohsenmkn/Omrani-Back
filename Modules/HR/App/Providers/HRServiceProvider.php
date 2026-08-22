@@ -8,6 +8,7 @@ use Modules\HR\App\Listeners\SyncUserAfterLogin;
 use Modules\HR\App\Services\GtarabarSyncService;
 use Modules\HR\Console\Commands\HRSyncStatus;
 use Modules\HR\Console\Commands\ImportAllFromGtarabar;
+use Modules\HR\Console\Commands\SyncAllTraining;
 use Modules\HR\Console\Commands\SyncGtarabarData;
 
 class HRServiceProvider extends ServiceProvider
@@ -48,6 +49,7 @@ class HRServiceProvider extends ServiceProvider
                 SyncGtarabarData::class,
                 HRSyncStatus::class,
                 ImportAllFromGtarabar::class,  // ✅ جدید
+                SyncAllTraining::class,   // ✅ جدید
             ]);
         }
     }

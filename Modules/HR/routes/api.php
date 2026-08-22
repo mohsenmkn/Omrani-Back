@@ -108,6 +108,17 @@ Route::middleware(['auth:sanctum'])->prefix('v1/hr')->name('hr.')->group(functio
         ->whereNumber('user')
         ->name('employees.attendance');
 
+    // ✅ آموزش پرسنل
+    Route::get('/employees/{user}/training', [EmployeeController::class, 'training'])
+        ->middleware('permission:hr.view')
+        ->whereNumber('user')
+        ->name('employees.training');
+
+    Route::post('/employees/{user}/training/sync', [EmployeeController::class, 'syncTraining'])
+        ->middleware('permission:hr.manage')
+        ->whereNumber('user')
+        ->name('employees.training.sync');
+
 
 // ── مدیریت ساختار سازمانی (فقط ادمین) ──
     Route::get('/org-structure', [OrgStructureController::class, 'index'])
@@ -139,6 +150,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/hr')->name('hr.')->group(functio
         ->middleware('permission:hr.manage')
         ->whereNumber('unit')
         ->name('org-structure.destroy');
+
+
 
     // ─────────────────────────────────────────────
     //  🔮 آینده — لیست پرسنل
