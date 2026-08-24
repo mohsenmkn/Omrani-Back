@@ -148,6 +148,7 @@ class EmployeeController extends Controller
                     'status'            => $t->status_title,
                     'status_severity'   => $t->status_severity,
                     'synced_at'         => $t->synced_at?->format('Y-m-d H:i'),
+                    'date_label'        => $t->date_label,
                 ];
             });
 
@@ -180,6 +181,23 @@ class EmployeeController extends Controller
         return response()->json([
             'message' => "sync با موفقیت انجام شد. {$count} دوره همگام‌سازی شد.",
             'synced_count' => $count,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/hr/employees/{user}/training/enrich-dates
+     * تکمیل تاریخ دوره‌ها با دقت ماه (On-Demand)
+     */
+    public function enrichTrainingDates(int $user): JsonResponse
+    {
+        $userModel = \Modules\Auth\App\Models\User::findOrFail($user);
+
+        $service = app(\Modules\HR\App\Services\TrainingSyncService::class);
+        $stats = $service->enrichDatesForUser($userModel, true);
+
+        return response()->json([
+            'message' => 'تاریخ دوره‌ها تکمیل شد.',
+            'stats'   => $stats,
         ]);
     }
 

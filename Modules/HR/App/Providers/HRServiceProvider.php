@@ -6,6 +6,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Support\ServiceProvider;
 use Modules\HR\App\Listeners\SyncUserAfterLogin;
 use Modules\HR\App\Services\GtarabarSyncService;
+use Modules\HR\Console\Commands\EnrichTrainingDates;
 use Modules\HR\Console\Commands\HRSyncStatus;
 use Modules\HR\Console\Commands\ImportAllFromGtarabar;
 use Modules\HR\Console\Commands\SyncAllTraining;
@@ -50,6 +51,7 @@ class HRServiceProvider extends ServiceProvider
                 HRSyncStatus::class,
                 ImportAllFromGtarabar::class,  // ✅ جدید
                 SyncAllTraining::class,   // ✅ جدید
+                EnrichTrainingDates::class,
             ]);
         }
     }

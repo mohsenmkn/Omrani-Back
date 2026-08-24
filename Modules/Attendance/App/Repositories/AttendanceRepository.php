@@ -44,6 +44,8 @@ class AttendanceRepository
         return DB::connection($this->connection)->select($sql, $params);
     }
 
+
+
     /**
      * دریافت نام کارمند
      */

@@ -24,6 +24,11 @@ class EmployeeTraining extends Model
         'performance_hours',
         'soap_raw_data',
         'synced_at',
+        'start_year',
+        'start_month',
+        'end_year',
+        'end_month',
+        'date_precision',
     ];
 
     protected $casts = [
@@ -81,5 +86,36 @@ class EmployeeTraining extends Model
             'در حال برگزاری' => 'warning',
             default => 'info',
         };
+    }
+
+    /**
+     * برچسب نمایشی تاریخ دوره
+     * مثال: "مرداد 1403" یا "از 1402 تا 1403"
+     */
+    public function getDateLabelAttribute(): string
+    {
+        $months = [
+            1 => 'فروردین', 2 => 'اردیبهشت', 3 => 'خرداد', 4 => 'تیر',
+            5 => 'مرداد', 6 => 'شهریور', 7 => 'مهر', 8 => 'آبان',
+            9 => 'آذر', 10 => 'دی', 11 => 'بهمن', 12 => 'اسفند',
+        ];
+
+        // دقت ماه
+        if ($this->start_year && $this->start_month) {
+            $start = $months[$this->start_month] . ' ' . $this->start_year;
+            $end = ($this->end_year && $this->end_month)
+                ? $months[$this->end_month] . ' ' . $this->end_year
+                : $start;
+            return $start === $end ? $start : "$start تا $end";
+        }
+
+        // دقت سال
+        if ($this->start_year) {
+            return $this->start_year === $this->end_year
+                ? "سال {$this->start_year}"
+                : "از {$this->start_year} تا {$this->end_year}";
+        }
+
+        return 'نامشخص';
     }
 }

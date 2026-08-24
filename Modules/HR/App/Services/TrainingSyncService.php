@@ -206,4 +206,96 @@ class TrainingSyncService
             Log::error("logSync: save record failed", [$e->getMessage(), $e->getTraceAsString()]);
         }
     }
+
+
+    /**
+     * ✅ کشف تاریخ دوره‌ها با تکنیک تنگ‌کردن بازه
+     *
+     * سطح ۱: اسکن سال‌ها (14 فراخوانی)
+     * سطح ۲: اسکن ماه‌های دارای دوره (12 فراخوانی به ازای هر سال)
+     */
+    public function enrichDatesForUser(User $user, bool $monthLevel = true, int $fromYear = 1392): array
+    {
+        $stats = ['years_scanned' => 0, 'months_scanned' => 0, 'updated' => 0];
+
+        if (empty($user->national_code)) return $stats;
+
+        $trainings = EmployeeTraining::where('user_id', $user->id)->get();
+        if ($trainings->isEmpty()) return $stats;
+
+        $toYear = (int) \Morilog\Jalali\Jalalian::now()->getYear();
+
+        // ── سطح ۱: اسکن سال‌ها ──
+        $yearsWithCourses = [];
+
+        for ($year = $fromYear; $year <= $toYear; $year++) {
+            $stats['years_scanned']++;
+
+            $records = $this->fetchRecords($user->national_code, "{$year}0101", "{$year}1229");
+
+            foreach ($records as $record) {
+                $code = $record['course_code'] ?? null;
+                if (!$code) continue;
+
+                $yearsWithCourses[$year] = true;
+
+                EmployeeTraining::where('user_id', $user->id)
+                    ->where('course_code', $code)
+                    ->update([
+                        'start_year'     => \DB::raw("COALESCE(start_year, {$year})"),
+                        'end_year'       => $year,
+                        'date_precision' => 'year',
+                    ]);
+            }
+
+            usleep(150000); // محافظت WAF
+        }
+
+        // ── سطح ۲: اسکن ماه‌ها (فقط سال‌های دارای دوره) ──
+        if ($monthLevel) {
+            foreach (array_keys($yearsWithCourses) as $year) {
+                for ($month = 1; $month <= 12; $month++) {
+                    $stats['months_scanned']++;
+
+                    $lastDay = $month <= 6 ? 31 : ($month <= 11 ? 30 : 29);
+                    $from = sprintf('%d%02d01', $year, $month);
+                    $to   = sprintf('%d%02d%02d', $year, $month, $lastDay);
+
+                    $records = $this->fetchRecords($user->national_code, $from, $to);
+
+                    foreach ($records as $record) {
+                        $code = $record['course_code'] ?? null;
+                        if (!$code) continue;
+
+                        EmployeeTraining::where('user_id', $user->id)
+                            ->where('course_code', $code)
+                            ->update([
+                                'start_year'     => \DB::raw("COALESCE(start_year, {$year})"),
+                                'start_month'    => \DB::raw("COALESCE(start_month, {$month})"),
+                                'end_year'       => $year,
+                                'end_month'      => $month,
+                                'date_precision' => 'month',
+                            ]);
+                    }
+
+                    usleep(120000);
+                }
+            }
+        }
+
+        $stats['updated'] = EmployeeTraining::where('user_id', $user->id)
+            ->whereNotNull('start_year')
+            ->count();
+
+        return $stats;
+    }
+
+    /**
+     * فراخوانی SOAP و پارس رکوردها
+     */
+    private function fetchRecords(string $nationalCode, string $from, string $to): array
+    {
+        $xml = $this->soapClient->fetchRaw($nationalCode, $from, $to);
+        return $xml ? $this->soapClient->parseResponse($xml) : [];
+    }
 }

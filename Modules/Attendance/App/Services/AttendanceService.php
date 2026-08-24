@@ -213,8 +213,6 @@ class AttendanceService
                     'personnel_code' => $emp->CodeMask,
                     'person_id' => $emp->ID,
                     'employee_name' => $emp->DisplayName,
-                    'national_code' => $emp->NationalCode ?? '',
-                    'unit' => $emp->UnitName ?? '',
                     'summary' => $summary->toArray(),
                 ];
             }

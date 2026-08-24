@@ -119,6 +119,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/hr')->name('hr.')->group(functio
         ->whereNumber('user')
         ->name('employees.training.sync');
 
+    Route::post('/employees/{user}/training/enrich-dates', [EmployeeController::class, 'enrichTrainingDates'])
+        ->middleware('permission:hr.manage')
+        ->whereNumber('user')
+        ->name('employees.training.enrich');
 
 // ── مدیریت ساختار سازمانی (فقط ادمین) ──
     Route::get('/org-structure', [OrgStructureController::class, 'index'])
