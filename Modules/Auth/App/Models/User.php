@@ -14,6 +14,7 @@ use Modules\PettyCash\App\Models\PettyCash;
 use Modules\Project\App\Models\Project;
 use Modules\WBS\App\Models\Task;
 use Morilog\Jalali\Jalalian;
+use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -638,18 +639,6 @@ class User extends Authenticatable
 
         return implode(' و ', $parts) ?: '0 روز';
     }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -82,20 +82,26 @@ class DashboardController extends Controller
     /**
      * دریافت اعلانات
      */
+    /**
+     * دریافت اعلانات (سراسری + اختصاصی کاربر)
+     */
     public function getAnnouncements(Request $request)
     {
         $user = $request->user();
 
         $announcements = Announcement::active()
+            ->forUser($user->id)  // ✅ فقط اعلانات سراسری + اختصاصی این کاربر
             ->orderBy('published_at', 'desc')
             ->limit(20)
             ->get()
             ->map(function ($announcement) use ($user) {
                 return [
                     'id' => $announcement->id,
+                    'user_id' => $announcement->user_id,  // ✅ اضافه شد
                     'title' => $announcement->title,
                     'description' => $announcement->description,
                     'type' => $announcement->type,
+                    'is_global' => is_null($announcement->user_id),  // ✅ اضافه شد
                     'is_read' => $announcement->isReadBy($user),
                     'created_at' => $announcement->created_at,
                     'published_at' => $announcement->published_at,

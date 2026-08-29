@@ -68,6 +68,8 @@ class Kernel extends HttpKernel
         'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
         'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
         'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+
+        'workflow.access' => \Modules\VirtualSecretariat\App\Http\Middleware\WorkflowDashboardAccess::class,
     ];
     protected function schedule(Schedule $schedule): void
     {
@@ -93,6 +95,10 @@ class Kernel extends HttpKernel
             ->onFailure(function (\Throwable $e) {
                 \Log::error("Scheduled training sync failed: {$e->getMessage()}");
             });
+        // Farzin Sync
+        $schedule->command('virtual-secretariat:sync-workflow')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
     }
 
     protected function commands(): void

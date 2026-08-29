@@ -128,6 +128,24 @@ return [
             ],
         ],
 
+            'sqlsrv_automation' => [
+                'driver' => 'sqlsrv',
+                'host' => env('AUTOMATION_DB_HOST', '172.31.5.13\Farzin'),
+                'port' => env('AUTOMATION_DB_PORT', '1433'),
+                'database' => env('AUTOMATION_DB_DATABASE', 'eOrganization'),
+                'username' => env('AUTOMATION_DB_USERNAME', 'app_UserRead'),
+                'password' => env('AUTOMATION_DB_PASSWORD', '2951402Fat@@'),
+                'charset' => 'utf8',
+                'prefix' => '',
+                'collation' => 'Persian_100_CI_AI_SC',
+                'options'  => [
+                    PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
+                    PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
+                    'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
+                    'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
+                ],
+            ],
+
     ],
 
 

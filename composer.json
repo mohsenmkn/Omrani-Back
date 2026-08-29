@@ -6,6 +6,8 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
+        "ext-libxml": "*",
+        "ext-simplexml": "*",
         "barryvdh/laravel-dompdf": "^3.1",
         "doctrine/dbal": "^3.10",
         "guzzlehttp/guzzle": "^7.2",
@@ -16,9 +18,8 @@
         "mews/captcha": "^3.4",
         "morilog/jalali": "^3.5",
         "nwidart/laravel-modules": "^10.0",
-        "spatie/laravel-permission": "^6.25",
-        "ext-libxml": "*",
-        "ext-simplexml": "*"
+        "phpoffice/phpspreadsheet": "^1.30",
+        "spatie/laravel-permission": "^6.25"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",

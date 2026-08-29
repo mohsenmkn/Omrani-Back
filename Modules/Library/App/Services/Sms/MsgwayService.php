@@ -20,10 +20,17 @@ class MsgwayService implements SmsServiceInterface
     /**
      * ارسال پیامک با دریافت یک رشته متنی کامل
      */
-    public function send(string $mobile, string $messageText): array
-    {
+    public function send(
+        string $mobile,
+        string $messageText,
+        ?string $templateId = null
+    ): array {
+        // اگر templateId ارسال نشده باشد، از مقدار پیش‌فرض کلاس استفاده کن
+        $templateId = $templateId ?? $this->defaultTemplateId;
+
         // نرمال‌سازی شماره موبایل
         $mobile = preg_replace('/[\s\-\+]/', '', $mobile);
+
         if (str_starts_with($mobile, '989')) {
             $mobile = '0' . substr($mobile, 2);
         }
@@ -36,46 +43,39 @@ class MsgwayService implements SmsServiceInterface
             ];
         }
 
-        // ⚠️ نکته کلیدی: حتی اگر یک متغیر دارید، params باید آرایه باشد!
-        // فرض بر این است که در پنل راه پیام، الگوی شما فقط یک متغیر دارد: {1}
+        // پارامترهای ارسال پیامک
         $params = [
             "mobile" => $mobile,
             "method" => "sms",
             "provider" => $this->provider,
-            "templateID" => $this->defaultTemplateId,
-            "params" => [$messageText] // <--- متن داخل آرایه قرار می‌گیرد
+            "templateID" => $templateId,
+            "params" => [$messageText],
         ];
 
-        /*
-         * نکته: اگر در پنل راه پیام اصلاً الگو نساخته‌اید و می‌خواهید پیامک متنی ساده بفرستید،
-         * آرایه $params بالا را حذف و از کد زیر استفاده کنید:
-         *
-         * $params = [
-         *     "mobile" => $mobile,
-         *     "method" => "sms",
-         *     "provider" => $this->provider,
-         *     "message" => $messageText // ارسال متن ساده بدون الگو
-         * ];
-         */
-
         $curl = curl_init();
-        curl_setopt_array($curl, array(
+
+        curl_setopt_array($curl, [
             CURLOPT_URL => 'https://api.msgway.com/send',
             CURLOPT_CUSTOMREQUEST => 'POST',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POSTFIELDS => json_encode($params),
-            CURLOPT_HTTPHEADER => array(
+            CURLOPT_HTTPHEADER => [
                 'apiKey: ' . $this->apiKey,
-            ),
-        ));
+                'Content-Type: application/json',
+            ],
+        ]);
 
         $response = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $error = curl_error($curl);
+
         curl_close($curl);
 
         if ($error) {
-            Log::channel('sms')->error("SMS cURL Error for {$mobile}: " . $error);
+            Log::channel('sms')->error(
+                "SMS cURL Error for {$mobile}: " . $error
+            );
+
             return [
                 'success' => false,
                 'message_id' => null,
@@ -83,14 +83,20 @@ class MsgwayService implements SmsServiceInterface
             ];
         }
 
-        Log::channel('sms')->info("SMS Response for {$mobile} (HTTP {$httpCode}): " . $response);
+        Log::channel('sms')->info(
+            "SMS Response for {$mobile} (HTTP {$httpCode}): " . $response
+        );
 
         $isSuccess = $httpCode >= 200 && $httpCode < 300;
 
-        // اگر پاسخ JSON حاوی خطای داخلی راه پیام باشد، آن را هم بررسی می‌کنیم
+        // بررسی خطای داخلی راه پیام
         if ($isSuccess) {
             $responseData = json_decode($response, true);
-            if (isset($responseData['status']) && $responseData['status'] !== 'success') {
+
+            if (
+                isset($responseData['status']) &&
+                $responseData['status'] !== 'success'
+            ) {
                 $isSuccess = false;
                 $error = $responseData['message'] ?? 'خطای ناشناخته از سمت پنل';
             }
@@ -99,9 +105,14 @@ class MsgwayService implements SmsServiceInterface
         return [
             'success' => $isSuccess,
             'message_id' => $isSuccess ? 'sent_via_msgway' : null,
-            'error' => $isSuccess ? null : "HTTP Error: {$httpCode} | Response: {$response}",
+            'error' => $isSuccess
+                ? null
+                : "HTTP Error: {$httpCode} | Response: {$response}",
         ];
     }
+
+
+
 
     public function checkStatus(string $messageId): array
     {

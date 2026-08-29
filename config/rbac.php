@@ -40,6 +40,13 @@ return [
         'complaintcategories' => ['read', 'create', 'update', 'delete'],
         'complaintstatistics' => ['view'],
         'hr' => ['view', 'manage'],
+        'virtual_secretariat' => ['view', 'manage', 'create_request', 'view_requests', 'manage_templates'],
+        'workflow_dashboard' => [
+            'view',           // مشاهده داشبورد
+            'view_all',       // مشاهده همه فرآیندها (ادمین)
+            'view_department',// مشاهده فرآیندهای واحد
+            'export',         // خروجی Excel
+        ],
 
     ],
     'labels' => [
@@ -75,7 +82,10 @@ return [
             'complaints' => 'شکایات، انتقادات و پیشنهادات',
             'complaintcategories' => 'دسته‌بندی شکایات',
             'complaintstatistics' => 'داشبورد آماری شکایات',
-            'hr'=>'مبنابع انسانی'
+            'hr'=>'منابع انسانی',
+            'virtual_secretariat' => 'دبیرخانه مجازی',
+            'workflow_dashboard' => 'داشبورد فرآیندها',
+
 
 
         ],
@@ -93,6 +103,12 @@ return [
             'approve'    => 'تایید نهایی',
             'send'       => 'ارسال',
             'reply'      => 'پاسخ به شکایت',
+            // در آرایه 'actions' می‌توانید اضافه کنید (اختیاری):
+            'create_request' => 'ثبت درخواست',
+            'view_requests' => 'مشاهده درخواست‌ها',
+            'manage_templates' => 'مدیریت قالب‌ها',
+            'view_all' => 'مشاهده همه فرآیندها',
+            'view_department' => 'مشاهده فرآیندهای واحد',
         ],
     ]
 

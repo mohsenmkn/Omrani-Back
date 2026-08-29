@@ -20,5 +20,6 @@
     "Payroll": true,
     "Attendance": true,
     "Library": true,
-    "Complaint": true
+    "Complaint": true,
+    "VirtualSecretariat": true
 }
