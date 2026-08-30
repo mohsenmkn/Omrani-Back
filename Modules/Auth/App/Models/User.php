@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Document\App\Models\Document;
+use Modules\HR\App\Models\EmployeePosition;
 use Modules\PettyCash\App\Models\PettyCash;
 use Modules\Project\App\Models\Project;
 use Modules\WBS\App\Models\Task;
@@ -640,6 +641,11 @@ class User extends Authenticatable
         return implode(' و ', $parts) ?: '0 روز';
     }
 
+
+    public function employeePosition()
+    {
+        return $this->hasOne(EmployeePosition::class, 'user_id');
+    }
 
 
 }

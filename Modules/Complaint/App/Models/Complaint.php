@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Auth\App\Models\User;
 use Modules\Complaint\App\Enums\ComplaintPriority;
 use Modules\Complaint\App\Enums\ComplaintStatus;
+use Modules\HR\App\Models\OrganizationalUnit;
 use Morilog\Jalali\Jalalian;
 
 class Complaint extends Model
@@ -20,6 +21,9 @@ class Complaint extends Model
         'user_id',
         'complaint_category_id',
         'tracking_code',
+        'organizational_unit_id',  // ✅ جدید
+        'assigned_to',              // ✅ جدید
+        'assigned_at',              // ✅ جدید
         'subject',
         'description',
         'status',
@@ -27,6 +31,7 @@ class Complaint extends Model
         'jalali_date',
         'answered_at',
         'resolved_at',
+
     ];
 
     protected $casts = [
@@ -34,6 +39,7 @@ class Complaint extends Model
         'priority' => ComplaintPriority::class,
         'answered_at' => 'datetime',
         'resolved_at' => 'datetime',
+        'assigned_at' => 'datetime',  // ✅ جدید
     ];
 
     protected static function booted(): void
@@ -152,6 +158,26 @@ class Complaint extends Model
         }
 
         return $query;
+    }
+
+    // ✅ relationship های جدید
+    public function organizationalUnit(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationalUnit::class);
+    }
+
+    // ✅ scope جدید (اختیاری - برای استفاده در جاهای دیگر)
+    public function scopeAssignedTo($query, int $userId)
+    {
+        return $query->where('assigned_to', $userId);
+    }
+
+    /**
+     * رابطه با مسئول پیگیری
+     */
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
 

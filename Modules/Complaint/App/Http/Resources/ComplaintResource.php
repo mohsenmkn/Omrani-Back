@@ -76,6 +76,30 @@ class ComplaintResource extends JsonResource
                     ->values();
             }),
 
+            // ✅ جدید: معاونت مقصد
+            'organizational_unit' => $this->whenLoaded('organizationalUnit', function () {
+                return [
+                    'id' => $this->organizationalUnit->id,
+                    'title' => $this->organizationalUnit->title,
+                ];
+            }),
+            // ✅ جدید
+            // ✅ جدید: مسئول پیگیری
+            'assigned_user' => $this->whenLoaded('assignedUser', function () {
+                return [
+                    'id' => $this->assignedUser->id,
+                    'name' => $this->assignedUser->name,
+                ];
+            }),
+            // ✅ جدید: تاریخ ارجاع
+            'assigned_at' => $this->assigned_at?->format('Y-m-d H:i:s'),
+            'user' => $this->whenLoaded('user', function () {
+                return [
+                    'id' => $this->user->id,
+                    'name' => $this->user->name,
+                    'personnel_code' => $this->user->personnel_code,
+                ];
+            }),
             'attachments' => $this->whenLoaded('attachments', function () {
                 return $this->attachments->map(fn ($attachment) => [
                     'id' => $attachment->id,

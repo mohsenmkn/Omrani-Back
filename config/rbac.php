@@ -36,7 +36,7 @@ return [
         'librarybooks'=>['view','manage'],
         'libraryreservations'=>['view','manage','create'],
         'librarystatistics'=>['view'],
-        'complaints' => ['read', 'create', 'update', 'delete', 'manage', 'reply', 'export'],
+        'complaints' => ['read', 'create', 'update', 'delete', 'manage', 'reply', 'export', 'review'],
         'complaintcategories' => ['read', 'create', 'update', 'delete'],
         'complaintstatistics' => ['view'],
         'hr' => ['view', 'manage'],
@@ -47,6 +47,7 @@ return [
             'view_department',// مشاهده فرآیندهای واحد
             'export',         // خروجی Excel
         ],
+        'complaintmanagers' => ['read', 'create', 'update', 'delete'],  // ✅ جدید
 
     ],
     'labels' => [
@@ -85,6 +86,7 @@ return [
             'hr'=>'منابع انسانی',
             'virtual_secretariat' => 'دبیرخانه مجازی',
             'workflow_dashboard' => 'داشبورد فرآیندها',
+            'complaintmanagers' => 'مسئولین پیگیری شکایات',  // ✅ جدید
 
 
 
@@ -109,6 +111,7 @@ return [
             'manage_templates' => 'مدیریت قالب‌ها',
             'view_all' => 'مشاهده همه فرآیندها',
             'view_department' => 'مشاهده فرآیندهای واحد',
+            'review' => 'بررسی و پاسخ به شکایات ارجاع‌شده',  // ✅ جدید
         ],
     ]
 

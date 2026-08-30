@@ -103,11 +103,11 @@ return [
             'charset'  => 'utf8',
             'prefix'   => '',
             'collation' => 'Persian_100_CI_AI_SC',
+            'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
+            'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
             'options'  => [
                 PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
                 PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
-                'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
-                'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
             ],
         ],
 
@@ -121,10 +121,11 @@ return [
             'charset'  => 'utf8',
             'prefix'   => '',
             'collation' => 'Persian_100_CI_AI_SC',
+            'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
+            'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
             'options'  => [
                 PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
                 PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
-                'TrustServerCertificate' => true,
             ],
         ],
 
@@ -138,11 +139,11 @@ return [
                 'charset' => 'utf8',
                 'prefix' => '',
                 'collation' => 'Persian_100_CI_AI_SC',
+                'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
+                'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
                 'options'  => [
                     PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 30,
                     PDO::SQLSRV_ATTR_ENCODING => PDO::SQLSRV_ENCODING_UTF8,
-                    'TrustServerCertificate' => true,  // 🔑 مهم برای SSL
-                    'Encrypt' => true,                  // 🔑 رمزنگاری اتصال
                 ],
             ],
 
