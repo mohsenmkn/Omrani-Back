@@ -108,6 +108,9 @@ class PayrollRepository
                     -- پاداش کارانه
                     'UF541',
 
+                    -- سایر مزایا
+                    'Otherbenefit',
+
                     -- کسورات
                     'EmployeeMainInsurance', 'Tax', 'kasremoaveghe', 'LoanSum', 'UF636',
 
@@ -154,6 +157,8 @@ class PayrollRepository
 
                         -- پاداش کارانه
                         WHEN 'UF541' THEN 26
+
+                        WHEN 'Otherbenefit' THEN 27
 
                         -- جمع مزایا
                         WHEN 'BonusSum' THEN 30
