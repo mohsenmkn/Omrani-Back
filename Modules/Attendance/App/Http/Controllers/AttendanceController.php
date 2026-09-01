@@ -5,6 +5,7 @@
 namespace Modules\Attendance\App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
 use Modules\Attendance\App\Services\AttendanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -114,4 +115,33 @@ class AttendanceController extends Controller
             'data' => $months,
         ]);
     }
+
+    /**
+     * GET /api/v1/attendance/latest
+     *
+     * آخرین ورود و خروج کاربر فعلی
+     */
+    public function latest(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (empty($user->personnel_code)) {
+            return response()->json([
+                'message' => 'کد پرسنلی تعریف نشده است.',
+                'data' => null,
+            ], 404);
+        }
+        //Log::info("Persoonel code is: " . $user->personnel_code);
+        $data = $this->attendanceService
+            ->getLatestAttendance($user->personnel_code);
+
+        return response()->json([
+            'data' => $data,
+        ]);
+    }
+
+
+
+
+
 }

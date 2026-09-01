@@ -601,4 +601,40 @@ class AttendanceService
         return sprintf('%02d:%02d', $hours, $mins);
     }
 
+    /**
+     * دریافت آخرین ورود و خروج کارمند
+     */
+    public function getLatestAttendance(string $personnelCode): array
+    {
+        $personId = $this->repository->findPersonIdByCode($personnelCode);
+
+        if (!$personId) {
+            return [];
+        }
+
+        $attendance = $this->repository->getLatestAttendance($personId);
+
+        if (!$attendance) {
+            return [];
+        }
+
+        return [
+            'date' => $attendance['date'],
+
+            'first_time' => $attendance['first_time'],
+
+            'last_time' => $attendance['last_time'] ?? '--:--',
+
+            'last_punch_time' => $attendance['last_punch_time'],
+
+            'punch_count' => $attendance['punch_count'],
+
+            'has_entry' => $attendance['has_entry'],
+
+            'has_exit' => $attendance['has_exit'],
+
+            'status' => $attendance['status'],
+        ];
+    }
+
 }

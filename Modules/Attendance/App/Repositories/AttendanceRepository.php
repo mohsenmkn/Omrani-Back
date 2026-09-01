@@ -200,4 +200,87 @@ class AttendanceRepository
         ORDER BY Date ASC, Time ASC
     ", [$personId, $month . '%']);
     }
+
+    /**
+     * دریافت آخرین تردد کارمند
+     *
+     * منطق:
+     * تعداد پانچ زوج   => ورود + خروج
+     * تعداد پانچ فرد   => ورود بدون خروج
+     */
+    public function getLatestAttendance(int $personId): ?array
+    {
+        $rows = DB::connection($this->connection)->select("
+        SELECT TOP 20
+            Date,
+            Time,
+            CardKhanNo
+        FROM [framework].[Att].[Attendance]
+        WHERE PersonelID = ?
+          AND ISNULL(Deleted, 0) = 0
+        ORDER BY Date DESC, Time DESC
+    ", [$personId]);
+
+        if (empty($rows)) {
+            return null;
+        }
+
+        // آخرین تاریخ دارای تردد
+        $latestDate = $rows[0]->Date;
+
+        // فقط پانچ‌های همان روز
+        $dayPunches = collect($rows)
+            ->filter(fn($row) => $row->Date === $latestDate)
+            ->sortBy('Time')
+            ->values();
+
+        $count = $dayPunches->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $first = $dayPunches->first();
+        $last = $dayPunches->last();
+
+        $firstTime = $this->convertMinutesToTime((int) $first->Time);
+
+        // تعداد زوج = خروج داریم
+        $hasExit = $count % 2 === 0;
+
+        $lastTime = $hasExit
+            ? $this->convertMinutesToTime((int) $last->Time)
+            : null;
+
+        return [
+            'date' => $latestDate,
+
+            'first_time' => $firstTime,
+
+            'last_time' => $lastTime,
+
+            'punch_count' => $count,
+
+            'has_entry' => true,
+
+            'has_exit' => $hasExit,
+
+            'status' => $hasExit
+                ? 'completed'
+                : 'inside',
+
+            'last_punch_time' => $this->convertMinutesToTime(
+                (int) $last->Time
+            ),
+        ];
+    }
+
+    private function convertMinutesToTime(int $minutes): string
+    {
+        $hours = intdiv($minutes, 60);
+        $mins = $minutes % 60;
+
+        return sprintf('%02d:%02d', $hours, $mins);
+    }
+
 }
