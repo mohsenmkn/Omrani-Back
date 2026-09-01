@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\PersonalAccessToken;
 use Modules\Document\App\Models\Document;
 use Modules\HR\App\Models\EmployeePosition;
 use Modules\PettyCash\App\Models\PettyCash;
@@ -45,6 +46,8 @@ class User extends Authenticatable
         'personnel_code',
         'otp_code',
         'otp_expires_at',
+        'settings',   // ✅ جدید
+        'avatar',     // ✅ جدید
     ];
 
     /**
@@ -75,6 +78,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'otp_expires_at' => 'datetime',
+        'settings' => 'array',  // ✅ جدید
     ];
 
 
@@ -645,6 +649,129 @@ class User extends Authenticatable
     public function employeePosition()
     {
         return $this->hasOne(EmployeePosition::class, 'user_id');
+    }
+
+    /**
+     * Relation با LoginActivity
+     */
+    public function loginActivities()
+    {
+        return $this->hasMany(LoginActivity::class)->orderByDesc('login_at');
+    }
+
+    /**
+     * دریافت آخرین فعالیت‌های ورود (10 تای آخر)
+     */
+    public function getRecentLoginActivities(int $limit = 10): array
+    {
+        return $this->loginActivities()
+            ->limit($limit)
+            ->get()
+            ->map(function (LoginActivity $activity) {
+                return [
+                    'id' => $activity->id,
+                    'ip' => $activity->ip_address,
+                    'browser' => $activity->browser,
+                    'os' => $activity->os,
+                    'device_type' => $activity->device_type,
+                    'location' => $activity->location ?? 'نامشخص',
+                    'time' => $activity->login_at->diffForHumans(null, true),
+                    'full_time' => $activity->login_at->format('Y-m-d H:i:s'),
+                    'is_current' => $activity->is_current,
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * دریافت دستگاه‌های فعال (بر اساس توکن‌های Sanctum)
+     */
+    /**
+     * دریافت دستگاه‌های فعال (بر اساس LoginActivity ها)
+     */
+    public function getActiveSessions(): array
+    {
+        // گرفتن LoginActivity های اخیر کاربر (10 تای آخر)
+        $activities = $this->loginActivities()
+            ->limit(10)
+            ->get();
+
+        // پیدا کردن توکن فعلی کاربر
+        $currentTokenId = $this->currentAccessToken()?->id;
+
+        return $activities->map(function (LoginActivity $activity) use ($currentTokenId) {
+            return [
+                'id' => $activity->id,
+                'ip' => $activity->ip_address ?? 'نامشخص',
+                'browser' => $activity->browser ?? 'نامشخص',
+                'os' => $activity->os ?? 'نامشخص',
+                'device_type' => $activity->device_type ?? 'desktop',
+                'location' => $activity->location ?? 'نامشخص',
+                'last_used_at' => $activity->login_at?->diffForHumans(null, true) ?? 'نامشخص',
+                'created_at' => $activity->created_at?->format('Y-m-d H:i') ?? 'نامشخص',
+                'is_current' => $activity->is_current,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Helper برای گرفتن IP آخرین استفاده توکن
+     */
+    private function getLastIpForToken($token): ?string
+    {
+        // در Sanctum IP ذخیره نمی‌شود، از آخرین LoginActivity استفاده می‌کنیم
+        $lastActivity = $this->loginActivities()->latest('login_at')->first();
+        return $lastActivity?->ip_address;
+    }
+
+    /**
+     * حذف یک توکن خاص (logout از یک دستگاه)
+     */
+    /**
+     * حذف یک نشست (دستگاه) خاص
+     */
+    public function revokeSession(int $activityId): bool
+    {
+        $activity = LoginActivity::where('user_id', $this->id)
+            ->where('id', $activityId)
+            ->first();
+
+        if ($activity) {
+            // اگر نشست فعلی است، اجازه حذف نده
+            if ($activity->is_current) {
+                return false;
+            }
+
+            $activity->update(['is_current' => false]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * خروج از تمام دستگاه‌ها (حذف همه توکن‌ها)
+     */
+    /**
+     * خروج از تمام دستگاه‌ها (به جز دستگاه فعلی)
+     */
+    public function revokeAllSessions(): void
+    {
+        LoginActivity::where('user_id', $this->id)
+            ->where('is_current', true)
+            ->where('id', '!=', $this->getCurrentActivityId())
+            ->update(['is_current' => false]);
+    }
+
+    /**
+     * دریافت ID فعالیت فعلی
+     */
+    private function getCurrentActivityId(): ?int
+    {
+        return LoginActivity::where('user_id', $this->id)
+            ->where('is_current', true)
+            ->orderByDesc('login_at')
+            ->value('id');
     }
 
 

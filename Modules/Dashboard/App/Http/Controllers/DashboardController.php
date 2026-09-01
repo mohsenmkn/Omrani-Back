@@ -119,7 +119,10 @@ class DashboardController extends Controller
     public function markAsRead(Request $request, $id)
     {
         $user = $request->user();
-        $announcement = Announcement::findOrFail($id);
+
+        $announcement = Announcement::active()
+            ->forUser($user->id)
+            ->findOrFail($id);
 
         if (!$announcement->isReadBy($user)) {
             $announcement->readers()->attach($user->id, [

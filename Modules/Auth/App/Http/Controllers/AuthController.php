@@ -2,11 +2,15 @@
 
 namespace Modules\Auth\App\Http\Controllers;
 
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 use Modules\Auth\App\Models\User;
 use Modules\Auth\App\Services\AuthService;
 use Spatie\Permission\Models\Role;
@@ -14,7 +18,7 @@ use Spatie\Permission\Models\Permission;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\PermissionRegistrar;
 use Modules\HR\App\Jobs\SyncUserPositionJob;
-
+use Modules\Auth\App\Models\LoginActivity;
 class AuthController extends Controller
 {
     protected $authService;
@@ -51,6 +55,10 @@ class AuthController extends Controller
         try {
             $result = $this->authService->login($request->only('mobile', 'password'));
             RateLimiter::clear($throttleKey);
+
+            $user = $result['user'];
+            // ✅ ثبت LoginActivity
+            LoginActivity::logLogin($user, $request);
 
             return response()->json([
                 'token' => $result['token'],
@@ -171,5 +179,258 @@ class AuthController extends Controller
         ]);
     }
 
-    // (متدهای syncUserPermissions, syncUserRoles, getRoles, getPermissions, getUserAccess را همان‌طور که بودند نگه دارید)
+    /**
+     * دریافت اطلاعات پروفایل کامل (با فعالیت‌ها و دستگاه‌ها)
+     */
+    public function profile(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        // گرفتن اطلاعات پایه
+        $profile = $user->getDashboardProfile();
+
+        // اضافه کردن فیلدهای اضافی
+        $profile['email'] = $user->email;
+        $profile['mobile'] = $user->mobile;
+        $profile['national_code'] = $user->national_code;
+        $profile['personnel_code'] = $user->personnel_code;
+        $profile['login_count'] = LoginActivity::where('user_id', $user->id)->count();
+        $profile['days_since_join'] = now()->diffInDays($user->created_at);
+
+        // گرفتن نقش‌ها
+        $roles = $user->getRoleNames()->values();
+
+        // گرفتن فعالیت‌های اخیر
+        $recentLogins = $user->getRecentLoginActivities(10);
+
+        // گرفتن دستگاه‌های فعال
+        $sessions = $user->getActiveSessions();
+
+        return response()->json([
+            'data' => $profile,
+            'roles' => $roles,
+            'recent_logins' => $recentLogins,
+            'sessions' => $sessions,
+        ]);
+    }
+
+    /**
+     * بروزرسانی اطلاعات پروفایل (فقط فیلدهای مجاز)
+     */
+    public function updateProfile(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|max:255|unique:users,email,' . $user->id,
+            'mobile' => 'sometimes|regex:/^09\d{9}$/|unique:users,mobile,' . $user->id,
+            'national_code' => 'sometimes|digits:10|unique:users,national_code,' . $user->id,
+            'address' => 'sometimes|nullable|string|max:500',
+            'birth_date' => 'sometimes|nullable|string|max:20',
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'پروفایل با موفقیت بروزرسانی شد',
+            'data' => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * تغییر رمز عبور
+     */
+    public function changePassword(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        if (!Hash::check($validated['current_password'], $user->password)) {
+            return response()->json([
+                'message' => 'رمز عبور فعلی اشتباه است'
+            ], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return response()->json([
+            'message' => 'رمز عبور با موفقیت تغییر کرد'
+        ]);
+    }
+
+    /**
+     * آپلود آواتار
+     */
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($request->hasFile('avatar')) {
+            // حذف آواتار قبلی
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+
+            $path = $request->file('avatar')->store('avatars', 'public');
+            $user->update(['avatar' => $path]);
+
+            return response()->json([
+                'message' => 'آواتار با موفقیت آپلود شد',
+                'avatar' => Storage::disk('public')->url($path),
+            ]);
+        }
+
+        return response()->json(['message' => 'خطا در آپلود'], 500);
+    }
+
+    /**
+     * دریافت تنظیمات کاربر
+     */
+    public function getSettings(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        // تنظیمات را می‌توان در جدول settings یا JSON column در users ذخیره کرد
+        // فعلاً از یک JSON column فرضی استفاده می‌کنیم
+        $settings = $user->settings ?? [];
+
+        return response()->json([
+            'data' => [
+                'general' => $settings['general'] ?? [
+                        'language' => 'fa',
+                        'timezone' => 'Asia/Tehran',
+                        'darkMode' => false,
+                        'animations' => true,
+                        'density' => 'comfortable',
+                    ],
+                'notifications' => $settings['notifications'] ?? [
+                        'email' => [
+                            'system' => true,
+                            'payslip' => true,
+                            'library' => true,
+                        ],
+                        'push' => [
+                            'enabled' => false,
+                            'sound' => true,
+                        ],
+                    ],
+            ],
+            'sessions' => $user->getActiveSessions(),
+        ]);
+    }
+
+    /**
+     * بروزرسانی تنظیمات
+     */
+    public function updateSettings(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'general' => 'sometimes|array',
+            'notifications' => 'sometimes|array',
+        ]);
+
+        $currentSettings = $user->settings ?? [];
+        $newSettings = array_merge($currentSettings, $validated);
+
+        $user->update(['settings' => $newSettings]);
+
+        return response()->json([
+            'message' => 'تنظیمات با موفقیت ذخیره شد',
+            'data' => $newSettings,
+        ]);
+    }
+
+    /**
+     * دریافت لیست دستگاه‌های فعال
+     */
+    public function sessions(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return response()->json([
+            'data' => $user->getActiveSessions(),
+        ]);
+    }
+
+    /**
+     * حذف یک نشست (دستگاه) خاص
+     */
+    /**
+     * حذف یک نشست (دستگاه) خاص
+     */
+    public function revokeSession(Request $request, $activityId)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $activity = LoginActivity::where('user_id', $user->id)
+            ->where('id', $activityId)
+            ->first();
+
+        if (!$activity) {
+            return response()->json(['message' => 'نشست یافت نشد'], 404);
+        }
+
+        // جلوگیری از حذف نشست فعلی
+        if ($activity->is_current) {
+            return response()->json([
+                'message' => 'نمی‌توانید نشست فعلی را حذف کنید'
+            ], 422);
+        }
+
+        $activity->update(['is_current' => false]);
+
+        return response()->json([
+            'message' => 'نشست با موفقیت بسته شد'
+        ]);
+    }
+
+    /**
+     * خروج از تمام دستگاه‌ها
+     */
+
+    /**
+     * خروج از تمام دستگاه‌ها
+     */
+    public function logoutAll(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        // پیدا کردن فعالیت فعلی
+        $currentActivityId = LoginActivity::where('user_id', $user->id)
+            ->where('is_current', true)
+            ->orderByDesc('login_at')
+            ->value('id');
+
+        // غیرفعال کردن همه فعالیت‌ها به جز فعالیت فعلی
+        LoginActivity::where('user_id', $user->id)
+            ->where('is_current', true)
+            ->where('id', '!=', $currentActivityId)
+            ->update(['is_current' => false]);
+
+        return response()->json([
+            'message' => 'از تمام دستگاه‌های دیگر خارج شدید'
+        ]);
+    }
 }
