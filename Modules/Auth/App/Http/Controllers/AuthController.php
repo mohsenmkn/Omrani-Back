@@ -57,6 +57,11 @@ class AuthController extends Controller
             RateLimiter::clear($throttleKey);
 
             $user = $result['user'];
+            if (!$user->is_active()) {
+                return response()->json([
+                    'message' => 'حساب کاربری شما غیرفعال است. لطفاً با واحد مربوطه تماس بگیرید.'
+                ], 403);
+            }
             // ✅ ثبت LoginActivity
             LoginActivity::logLogin($user, $request);
 
@@ -89,6 +94,11 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $result['user'];
+        if (!$user->is_active()) {
+            return response()->json([
+                'message' => 'حساب کاربری شما غیرفعال است. لطفاً با واحد مربوطه تماس بگیرید.'
+            ], 403);
+        }
 
         try {
             $result = $this->authService->sendOtp($request->mobile);
