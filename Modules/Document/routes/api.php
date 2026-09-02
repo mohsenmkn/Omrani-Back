@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 
 use Modules\Document\App\Http\Controllers\DocumentController;
 
-Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->group(function () {
     Route::get('documents', [DocumentController::class, 'index']);
     Route::post('documents/upload', [DocumentController::class, 'upload']);
     Route::get('documents/{document}', [DocumentController::class, 'show']);

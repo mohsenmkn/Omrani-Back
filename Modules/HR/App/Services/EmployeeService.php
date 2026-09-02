@@ -16,14 +16,21 @@ class EmployeeService
     /**
      * لیست پرسنل با فیلتر و pagination
      */
+    /**
+     * لیست پرسنل با فیلتر و pagination
+     */
     public function getEmployeesList(array $filters = [], int $perPage = 15)
     {
-        $query = EmployeePosition::with(['user:id,name,mobile,email', 'unit:id,title,level'])
+        $query = EmployeePosition::with([
+            'user:id,name,mobile,email,employee_type,is_active',
+            'unit:id,title,level'
+        ])
             ->orderBy('personnel_code');
 
         // جستجو
         if (!empty($filters['search'])) {
             $search = $filters['search'];
+
             $query->where(function ($q) use ($search) {
                 $q->where('personnel_code', 'LIKE', "%{$search}%")
                     ->orWhere('post_title', 'LIKE', "%{$search}%")
@@ -38,6 +45,20 @@ class EmployeeService
         // فیلتر واحد سازمانی
         if (!empty($filters['unit_id'])) {
             $query->where('organizational_unit_id', $filters['unit_id']);
+        }
+
+        // ✅ فیلتر نوع کاربر (پرسنل / پیمانکار)
+        if (!empty($filters['employee_type'])) {
+            $query->whereHas('user', function ($q) use ($filters) {
+                $q->where('employee_type', $filters['employee_type']);
+            });
+        }
+
+        // ✅ فیلتر وضعیت (فعال / غیرفعال)
+        if (isset($filters['is_active']) && $filters['is_active'] !== '') {
+            $query->whereHas('user', function ($q) use ($filters) {
+                $q->where('is_active', filter_var($filters['is_active'], FILTER_VALIDATE_BOOLEAN));
+            });
         }
 
         return $query->paginate($perPage);

@@ -44,6 +44,7 @@ class User extends Authenticatable
         'settings',
         'avatar',
         'is_active',
+        'employee_type',
     ];
 
     protected $hidden = [
@@ -57,6 +58,7 @@ class User extends Authenticatable
         'otp_expires_at'    => 'datetime',
         'settings'          => 'array',
         'is_active' => 'boolean',
+        'employee_type'     => 'string',
     ];
 
 
@@ -78,6 +80,26 @@ class User extends Authenticatable
     public function isInactive(): bool
     {
         return !$this->is_active;
+    }
+
+
+    public function isContractor(): bool
+    {
+        return $this->employee_type === 'contractor';
+    }
+
+    public function isPersonnel(): bool
+    {
+        return !$this->isContractor();
+    }
+
+    /**
+     * آیا کاربر اجازه ورود به سیستم را دارد؟
+     * پیمانکار حتی اگر فعال هم باشد نباید بتواند لاگین کند.
+     */
+    public function canLogin(): bool
+    {
+        return (bool) $this->is_active && !$this->isContractor();
     }
 
     /*
@@ -462,6 +484,9 @@ class User extends Authenticatable
     /**
      * دریافت آخرین حکم کارگزینی
      */
+    /**
+     * دریافت آخرین حکم کارگزینی
+     */
     public function getEmployeeStatute(): ?object
     {
         if (empty($this->personnel_code)) {
@@ -471,37 +496,30 @@ class User extends Authenticatable
         try {
             return DB::connection('gtarabar')->selectOne(
                 "
-                SELECT TOP 1
-
-                    es.EmployeeStatuteID,
-                    es.EmployeeRef,
-
-                    es.PostRef,
-                    p.Code AS PostCode,
-                    p.Title AS PostTitle,
-
-                    es.JobRef,
-                    j.Code AS JobCode,
-                    j.Title AS JobTitle,
-
-                    es.DepartmentRef,
-                    es.OrganizationalStructureRef
-
-                FROM HCM3.EmployeeStatute es
-
-                LEFT JOIN HCM3.Post p
-                    ON p.PostID = es.PostRef
-
-                LEFT JOIN HCM3.Job j
-                    ON j.JobID = es.JobRef
-
-                INNER JOIN HCM3.Employee e
-                    ON e.EmployeeID = es.EmployeeRef
-
-                WHERE e.Code = ?
-
-                ORDER BY es.EmployeeStatuteID DESC
-                ",
+            SELECT TOP 1
+                es.EmployeeStatuteID,
+                es.EmployeeRef,
+                es.PostRef,
+                p.Code AS PostCode,
+                p.Title AS PostTitle,
+                es.JobRef,
+                j.Code AS JobCode,
+                j.Title AS JobTitle,
+                es.DepartmentRef,
+                d.Title AS DepartmentTitle,
+                es.OrganizationalStructureRef
+            FROM HCM3.EmployeeStatute es
+            LEFT JOIN HCM3.Post p
+                ON p.PostID = es.PostRef
+            LEFT JOIN HCM3.Job j
+                ON j.JobID = es.JobRef
+            LEFT JOIN HCM3.Department d
+                ON d.DepartmentID = es.DepartmentRef
+            INNER JOIN HCM3.Employee e
+                ON e.EmployeeID = es.EmployeeRef
+            WHERE e.Code = ?
+            ORDER BY es.EmployeeStatuteID DESC
+            ",
                 [$this->personnel_code]
             );
         } catch (\Throwable $e) {

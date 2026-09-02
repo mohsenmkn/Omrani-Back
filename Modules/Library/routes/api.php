@@ -7,7 +7,7 @@ use Modules\Library\App\Http\Controllers\CategoryController;
 use Modules\Library\App\Http\Controllers\DashboardController;
 use Modules\Library\App\Http\Controllers\NotificationController;
 
-Route::middleware(['auth:sanctum'])->prefix('library')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('library')->group(function () {
 
     // ========== کاربر عادی ==========
     Route::get('/books', [BookController::class, 'index']);

@@ -19,9 +19,16 @@ class EmployeeController extends Controller
      * GET /api/v1/hr/employees
      * لیست پرسنل با فیلتر و pagination
      */
+
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['search', 'unit_id']);
+        $filters = $request->only([
+            'search',
+            'unit_id',
+            'employee_type',
+            'is_active',
+        ]);
+
         $perPage = min((int) $request->input('per_page', 15), 50);
 
         $employees = $this->employeeService->getEmployeesList($filters, $perPage);

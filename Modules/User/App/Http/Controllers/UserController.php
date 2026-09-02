@@ -8,68 +8,103 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Modules\Auth\App\Models\User;
+use Modules\HR\App\Models\EmployeePosition;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = (int) $request->input('per_page', 10);
+        $perPage = (int) $request->input('per_page', 15);
 
-        $users = User::query()
-            ->with(['roles', 'permissions'])
-            ->when($request->filled('search'), function ($query) use ($request) {
+        $query = EmployeePosition::query()
+            ->with(['user', 'unit'])
+            ->when($request->filled('search'), function ($q) use ($request) {
                 $search = trim($request->input('search'));
-
-                $query->where(function ($query) use ($search) {
-                    $query->where('name', 'like', "%{$search}%")
-                        ->orWhere('mobile', 'like', "%{$search}%")
-                        ->orWhere('national_code', 'like', "%{$search}%")
-                        ->orWhere('personnel_code', 'like', "%{$search}%");
+                $q->where(function ($q) use ($search) {
+                    $q->where('post_title', 'like', "%{$search}%")
+                        ->orWhere('job_title', 'like', "%{$search}%")
+                        ->orWhere('personnel_code', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%")
+                                ->orWhere('mobile', 'like', "%{$search}%");
+                        });
                 });
             })
-            ->when($request->filled('role'), function ($query) use ($request) {
-                $role = $request->input('role');
-
-                $query->whereHas('roles', function ($query) use ($role) {
-                    $query->where('name', $role);
+            ->when($request->filled('unit_id'), function ($q) use ($request) {
+                $q->where('organizational_unit_id', $request->input('unit_id'));
+            })
+            ->when($request->filled('employee_type'), function ($q) use ($request) {
+                $q->whereHas('user', function ($q) use ($request) {
+                    $q->where('employee_type', $request->input('employee_type'));
                 });
             })
-            ->latest()
-            ->paginate($perPage);
+            ->when($request->has('is_active') && $request->input('is_active') !== '', function ($q) use ($request) {
+                $q->whereHas('user', function ($q) use ($request) {
+                    $q->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
+                });
+            })
+            ->latest();
 
-        return response()->json($users);
+        $positions = $query->paginate($perPage);
+
+        return response()->json($positions);
     }
 
     // ایجاد کاربر جدید
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'mobile' => 'required|regex:/^09\d{9}$/|unique:users,mobile',
-            'password' => 'required|string|min:6',
-            'national_code'  => ['nullable', 'digits:10', 'unique:users,national_code'],
-            'personnel_code' => ['nullable', 'digits_between:1,20', 'unique:users,personnel_code'],
-            'roles'          => 'nullable|array',
-            'roles.*'        => 'string|exists:roles,name', // بررسی وجود نقش در دیتابیس
+            'name' => ['required', 'string', 'max:255'],
+            'mobile' => [
+                'required',
+                'regex:/^09\d{9}$/',
+                Rule::unique('users', 'mobile'),
+            ],
+            'password' => ['required', 'string', 'min:6'],
+            'national_code' => [
+                'nullable',
+                'digits:10',
+                Rule::unique('users', 'national_code'),
+            ],
+            'personnel_code' => [
+                'nullable',
+                'digits_between:1,20',
+                Rule::unique('users', 'personnel_code'),
+            ],
+            'roles' => ['nullable', 'array'],
+            'roles.*' => ['string', 'exists:roles,name'],
+            'is_active' => ['nullable', 'boolean'],
         ]);
-
 
         $user = User::create([
-            'name' => $validated['name'],
-            'mobile' => $validated['mobile'],
-            'password' => Hash::make($validated['password']),
-            'personnel_code' => $validated['personnel_code'],
-            'national_code' => $validated['national_code'],
+            'name'           => $validated['name'],
+            'mobile'         => $validated['mobile'],
+            'password'       => Hash::make($validated['password']),
+            'national_code'  => $validated['national_code'] ?? null,
+            'personnel_code' => $validated['personnel_code'] ?? null,
+
+            /**
+             * کاربر دستی فعلاً پرسنل در نظر گرفته می‌شود.
+             * پیمانکاران از سینک گستراب تعیین نوع می‌شوند.
+             */
+            'employee_type'  => 'personnel',
+
+            'is_active'      => array_key_exists('is_active', $validated)
+                ? (bool) $validated['is_active']
+                : true,
         ]);
 
-        // 3. اختصاص نقش‌ها به کاربر جدید
         if ($request->has('roles')) {
-            $user->syncRoles($validated['roles']);
+            $user->syncRoles($validated['roles'] ?? []);
         }
 
-        return response()->json(['message' => 'کاربر با موفقیت ایجاد شد', 'user' => $user], 201);
+        return response()->json([
+            'message' => 'کاربر با موفقیت ایجاد شد',
+            'user'    => $user->load('roles'),
+        ], 201);
     }
 
     // نمایش یک کاربر خاص
@@ -83,45 +118,110 @@ class UserController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+
             $validated = $request->validate([
-                'name'           => 'sometimes|string|max:255',
-                'mobile'         => ['sometimes', 'regex:/^09\d{9}$/', 'unique:users,mobile,' . $user->id],
-                'password'       => 'nullable|string|min:6',
-                'national_code'  => ['nullable', 'digits:10', 'unique:users,national_code,' . $user->id],
-                'personnel_code' => ['nullable', 'digits_between:1,20', 'unique:users,personnel_code,' . $user->id],
-                'roles'          => 'nullable|array',
-                'roles.*'        => 'string|exists:roles,name',
+                'name'           => ['sometimes', 'required', 'string', 'max:255'],
+                'mobile'         => [
+                    'sometimes',
+                    'required',
+                    'regex:/^09\d{9}$/',
+                    Rule::unique('users', 'mobile')->ignore($user->id),
+                ],
+                'password'       => ['nullable', 'string', 'min:6'],
+                'national_code'  => [
+                    'nullable',
+                    'digits:10',
+                    Rule::unique('users', 'national_code')->ignore($user->id),
+                ],
+                'personnel_code' => [
+                    'nullable',
+                    'digits_between:1,20',
+                    Rule::unique('users', 'personnel_code')->ignore($user->id),
+                ],
+                'roles'          => ['nullable', 'array'],
+                'roles.*'        => ['string', 'exists:roles,name'],
+                'is_active'      => ['nullable', 'boolean'],
             ]);
 
-            $dataToUpdate = [
-                'name'           => $validated['name'],
-                'mobile'         => $validated['mobile'],
-                'national_code'  => $validated['national_code'],
-                'personnel_code' => $validated['personnel_code'],
-            ];
+            /**
+             * فقط فیلدهایی که ارسال شده‌اند آپدیت شوند
+             */
+            $dataToUpdate = collect($validated)
+                ->only([
+                    'name',
+                    'mobile',
+                    'national_code',
+                    'personnel_code',
+                ])
+                ->toArray();
 
-            // جلوگیری از هش شدن پسورد در صورت ارسال مقدار خالی
             if (!empty($validated['password'])) {
                 $dataToUpdate['password'] = Hash::make($validated['password']);
-            } else {
-                unset($dataToUpdate['password']);
+            }
+
+            /**
+             * مدیریت وضعیت فعال/غیرفعال
+             */
+            if (array_key_exists('is_active', $validated)) {
+                $newStatus = (bool) $validated['is_active'];
+
+                // پیمانکار نباید فعال شود
+                if ($user->isContractor() && $newStatus) {
+                    return response()->json([
+                        'message' => 'امکان فعال‌سازی پیمانکار وجود ندارد',
+                    ], 403);
+                }
+
+                // کاربر نباید بتواند خودش را غیرفعال کند
+                if (
+                    $user->id === auth()->id()
+                    && !$newStatus
+                ) {
+                    return response()->json([
+                        'message' => 'شما نمی‌توانید حساب کاربری خودتان را غیرفعال کنید',
+                    ], 403);
+                }
+
+                $dataToUpdate['is_active'] = $newStatus;
+            }
+
+            /**
+             * اگر پیمانکار است، وضعیت همیشه غیرفعال باقی بماند
+             */
+            if ($user->isContractor()) {
+                $dataToUpdate['is_active'] = false;
             }
 
             $user->update($dataToUpdate);
 
-            //update Role
-            $user->syncRoles($request->input('roles', []));
+            /**
+             * فقط زمانی نقش‌ها را sync کن که فیلد roles ارسال شده باشد
+             */
+            if ($request->has('roles')) {
+                $user->syncRoles($validated['roles'] ?? []);
+            }
 
-            return response()->json(['message' => 'کاربر با موفقیت ویرایش شد', 'user' => $user,'data' => $user->load('roles') ], 201);
-        }
-        catch (\Illuminate\Validation\ValidationException $e) {
-            // بهتر است خطاهای ولیدیشن را جداگانه مدیریت کنید تا دقیقاً بفهمید کدام فیلد خطا دارد
-            return response()->json(['message' => 'خطای اعتبارسنجی', 'errors' => $e->errors()], 422);
-        }
-        catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
-        }
+            /**
+             * اگر کاربر غیرفعال شد، توکن‌های او حذف شود
+             */
+            if (isset($dataToUpdate['is_active']) && !$dataToUpdate['is_active']) {
+                $user->tokens()->delete();
+            }
 
+            return response()->json([
+                'message' => 'کاربر با موفقیت ویرایش شد',
+                'user'    => $user->fresh()->load('roles'),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'خطای اعتبارسنجی',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     // حذف کاربر

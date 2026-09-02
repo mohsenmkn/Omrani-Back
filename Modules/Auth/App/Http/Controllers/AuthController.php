@@ -48,28 +48,36 @@ class AuthController extends Controller
             }
 
             if (!captcha_api_check((string) $request->captcha, (string) $request->captcha_key)) {
+                RateLimiter::hit($throttleKey, 300);
                 return response()->json(['message' => 'کد امنیتی (کپچا) اشتباه است.'], 400);
             }
         }
 
         try {
             $result = $this->authService->login($request->only('mobile', 'password'));
-            RateLimiter::clear($throttleKey);
-
             $user = $result['user'];
-            if (!$user->is_active()) {
+
+            if (!$user->canLogin()) {
                 return response()->json([
-                    'message' => 'حساب کاربری شما غیرفعال است. لطفاً با واحد مربوطه تماس بگیرید.'
+                    'message' => $user->isContractor()
+                        ? 'ورود برای این حساب امکان‌پذیر نیست'
+                        : 'حساب کاربری شما غیرفعال است',
                 ], 403);
             }
+
+            // ✅ فقط وقتی ورود موفقیت‌آمیز بود، شمارنده پاک شود
+            RateLimiter::clear($throttleKey);
+
             // ✅ ثبت LoginActivity
             LoginActivity::logLogin($user, $request);
 
+            // ✅ قبل از return
+            dispatch(new SyncUserPositionJob($user))->afterResponse();
+
             return response()->json([
                 'token' => $result['token'],
-                'user' => $result['user']
+                'user'  => $result['user']
             ]);
-            dispatch(new SyncUserPositionJob($user))->afterResponse();
         } catch (ValidationException $e) {
             RateLimiter::hit($throttleKey, 300);
             return response()->json(['message' => $e->errors()['mobile'][0]], 401);
@@ -94,9 +102,11 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $result['user'];
-        if (!$user->is_active()) {
+        if (!$user->canLogin()) {
             return response()->json([
-                'message' => 'حساب کاربری شما غیرفعال است. لطفاً با واحد مربوطه تماس بگیرید.'
+                'message' => $user->isContractor()
+                    ? 'ورود برای این حساب امکان‌پذیر نیست'
+                    : 'حساب کاربری شما غیرفعال است',
             ], 403);
         }
 
@@ -120,6 +130,14 @@ class AuthController extends Controller
 
         try {
             $user = $this->authService->verifyOtp($request->mobile, $request->otp);
+
+            if (!$user->canLogin()) {
+                return response()->json([
+                    'message' => $user->isContractor()
+                        ? 'ورود برای حساب‌های پیمانکار امکان‌پذیر نیست'
+                        : 'حساب کاربری شما غیرفعال است',
+                ], 403);
+            }
 
             return response()->json([
                 'message' => 'کد با موفقیت تایید شد.',
@@ -146,6 +164,14 @@ class AuthController extends Controller
             // 1. ابتدا OTP را مجدداً بررسی می‌کنیم (امنیت)
             $user = $this->authService->verifyOtp($request->mobile, $request->otp);
 
+            if (!$user->canLogin()) {
+                return response()->json([
+                    'message' => $user->isContractor()
+                        ? 'ورود برای حساب‌های پیمانکار امکان‌پذیر نیست'
+                        : 'حساب کاربری شما غیرفعال است',
+                ], 403);
+            }
+
             // 2. تغییر رمز عبور
             $this->authService->resetPassword($user, $request->password);
 
@@ -160,7 +186,12 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()->currentAccessToken();
+
+        if ($token) {
+            $token->delete();
+        }
+
         return response()->json(['message' => 'با موفقیت خارج شدید.']);
     }
 
@@ -170,9 +201,10 @@ class AuthController extends Controller
     }
 
     // ... (سایر متدهای me, getRoles, getPermissions و ... بدون تغییر باقی می‌مانند)
+
+
     public function me(Request $request)
     {
-        /** @var \Modules\Auth\App\Models\User $user */
         $user = $request->user();
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
@@ -188,7 +220,6 @@ class AuthController extends Controller
             ],
         ]);
     }
-
     /**
      * دریافت اطلاعات پروفایل کامل (با فعالیت‌ها و دستگاه‌ها)
      */
@@ -238,8 +269,7 @@ class AuthController extends Controller
             'email' => 'sometimes|email|max:255|unique:users,email,' . $user->id,
             'mobile' => 'sometimes|regex:/^09\d{9}$/|unique:users,mobile,' . $user->id,
             'national_code' => 'sometimes|digits:10|unique:users,national_code,' . $user->id,
-            'address' => 'sometimes|nullable|string|max:500',
-            'birth_date' => 'sometimes|nullable|string|max:20',
+
         ]);
 
         $user->update($validated);
@@ -427,17 +457,19 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        // پیدا کردن فعالیت فعلی
         $currentActivityId = LoginActivity::where('user_id', $user->id)
             ->where('is_current', true)
             ->orderByDesc('login_at')
             ->value('id');
 
-        // غیرفعال کردن همه فعالیت‌ها به جز فعالیت فعلی
-        LoginActivity::where('user_id', $user->id)
-            ->where('is_current', true)
-            ->where('id', '!=', $currentActivityId)
-            ->update(['is_current' => false]);
+        $query = LoginActivity::where('user_id', $user->id)
+            ->where('is_current', true);
+
+        if ($currentActivityId) {
+            $query->where('id', '!=', $currentActivityId);
+        }
+
+        $query->update(['is_current' => false]);
 
         return response()->json([
             'message' => 'از تمام دستگاه‌های دیگر خارج شدید'

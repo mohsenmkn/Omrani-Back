@@ -5,7 +5,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Attendance\App\Http\Controllers\AttendanceController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->name('api.')->group(function () {
     // خلاصه تردد کاربر فعلی
     Route::get('attendance/summary', [AttendanceController::class, 'summary']);
     Route::get('attendance/latest', [AttendanceController::class, 'latest']);

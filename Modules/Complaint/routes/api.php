@@ -8,7 +8,8 @@ use Modules\Complaint\App\Http\Controllers\Api\CategoryController;
 use Modules\Complaint\App\Http\Controllers\Api\ComplaintController;
 use Modules\Complaint\App\Http\Controllers\Api\ComplaintStatisticsController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->group(function ()
+{
 
     // ─── سمت پرسنل ───
     Route::prefix('complaints')->group(function () {

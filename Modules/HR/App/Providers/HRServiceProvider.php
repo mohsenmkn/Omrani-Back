@@ -9,6 +9,7 @@ use Modules\HR\App\Services\GtarabarSyncService;
 use Modules\HR\Console\Commands\EnrichTrainingDates;
 use Modules\HR\Console\Commands\HRSyncStatus;
 use Modules\HR\Console\Commands\ImportAllFromGtarabar;
+use Modules\HR\Console\Commands\ReclassifyUsersEmployeeType;
 use Modules\HR\Console\Commands\SyncAllTraining;
 use Modules\HR\Console\Commands\SyncGtarabarData;
 
@@ -52,6 +53,7 @@ class HRServiceProvider extends ServiceProvider
                 ImportAllFromGtarabar::class,  // ✅ جدید
                 SyncAllTraining::class,   // ✅ جدید
                 EnrichTrainingDates::class,
+                ReclassifyUsersEmployeeType::class
             ]);
         }
     }

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\PettyCash\App\Http\Controllers\PettyCashController;
 use Modules\PettyCash\App\Http\Controllers\PettyCashTransactionController;
 
-Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->group(function () {
 
     Route::apiResource('petty-cashes', PettyCashController::class);
 

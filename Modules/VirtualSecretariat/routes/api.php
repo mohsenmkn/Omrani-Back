@@ -14,7 +14,7 @@ use Modules\VirtualSecretariat\App\Http\Controllers\Api\WorkflowDashboardControl
 */
 
 // Routes عمومی (نیاز به احراز هویت)
-Route::middleware(['auth:sanctum'])
+Route::middleware(['auth:sanctum', 'user.can_login'])
     ->prefix('v1/virtual-secretariat')->group(function () {
 
     // ═══════ درخواست‌های کاربران ═══════

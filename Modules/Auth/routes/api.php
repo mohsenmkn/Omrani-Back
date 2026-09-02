@@ -15,7 +15,7 @@ Route::prefix('v1/auth')->group(function() {
 
 
     // روت‌های محافظت‌شده
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'user.can_login'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 

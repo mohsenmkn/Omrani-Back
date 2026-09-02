@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\User\App\Http\Controllers\UserController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->name('api.')->group(function () {
     Route::get('/users', [UserController::class, 'index'])
         ->middleware('permission:users.read')
         ->name('users.index');

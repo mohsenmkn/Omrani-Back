@@ -12,6 +12,7 @@ use Modules\HR\App\Models\EmployeeStatuteHistory;
 use Modules\HR\App\Models\HRSyncLog;
 use Modules\HR\App\Models\OrganizationalUnit;
 use Spatie\Permission\Models\Role;
+use Illuminate\Support\Str;
 
 class GtarabarSyncService
 {
@@ -293,14 +294,15 @@ class GtarabarSyncService
     //  ثبت لاگ sync
     // ─────────────────────────────────────────────
     private function logSync(
-        ?int $userId,
-        string $syncType,
-        string $status,
-        int $recordsSynced,
-        ?string $errorMessage,
-        float $startTime,
-        string $triggerSource
-    ): void {
+            ?int $userId,
+            string $syncType,
+            string $status,
+            int $recordsSynced,
+            ?string $errorMessage,
+            float $startTime,
+            string $triggerSource
+        ): void
+    {
         try {
             HRSyncLog::create([
                 'user_id'        => $userId,
@@ -321,27 +323,52 @@ class GtarabarSyncService
 // ─────────────────────────────────────────────
 //  Import کاربران از گستراب (فقط Status=2)
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+//  Import کاربران از گستراب (فقط Status=2)
+//  همراه با تشخیص پرسنل / پیمانکار
+// ─────────────────────────────────────────────
     public function importUsersFromGtarabar(
         int $limit = 0,
         string $roleName = 'پرسنل',
         callable $progressCallback = null
     ): array {
         $stats = [
-            'total'   => 0,
-            'created' => 0,
-            'updated' => 0,
-            'skipped' => 0,
+            'total'          => 0,
+            'created'        => 0,
+            'updated'        => 0,
+            'skipped'        => 0,
             'roles_assigned' => 0,
+            'personnel'      => 0,
+            'contractors'    => 0,
         ];
 
-        $role = Role::firstOrCreate(['name' => $roleName]);
+        $personnelRole  = Role::firstOrCreate(['name' => $roleName]);
+        $contractorRole = Role::firstOrCreate(['name' => $this->getContractorRoleName()]);
 
         $query = DB::connection('gtarabar')
             ->table('HCM3.Employee AS e')
             ->join('GNR3.Party AS p', 'p.PartyID', '=', 'e.PartyRef')
+
+            // آخرین حکم هر کارمند
+            ->leftJoin('HCM3.EmployeeStatute AS es', function ($join) {
+                $join->on('es.EmployeeRef', '=', 'e.EmployeeID')
+                    ->whereRaw("
+                    es.EmployeeStatuteID = (
+                        SELECT MAX(es2.EmployeeStatuteID)
+                        FROM HCM3.EmployeeStatute es2
+                        WHERE es2.EmployeeRef = e.EmployeeID
+                    )
+                ");
+            })
+
+            ->leftJoin('HCM3.Post AS post', 'post.PostID', '=', 'es.PostRef')
+            ->leftJoin('HCM3.Job AS job', 'job.JobID', '=', 'es.JobRef')
+            ->leftJoin('HCM3.Department AS dept', 'dept.DepartmentID', '=', 'es.DepartmentRef')
+
             ->where('e.Status', 2)
             ->whereNotNull('e.Code')
             ->where('e.Code', '!=', '')
+
             ->select(
                 'e.EmployeeID',
                 'e.Code AS PersonnelCode',
@@ -349,7 +376,10 @@ class GtarabarSyncService
                 'p.FullName',
                 'p.NationalID',
                 'p.Mobile',
-                'p.Email'
+                'p.Email',
+                'dept.Title AS UnitTitle',
+                'post.Title AS PostTitle',
+                'job.Title AS JobTitle'
             )
             ->orderBy('e.Code');
 
@@ -358,20 +388,51 @@ class GtarabarSyncService
         }
 
         $employees = $query->get();
+
         $stats['total'] = $employees->count();
 
         foreach ($employees as $index => $emp) {
             try {
+                // ✅ تشخیص نوع کاربر
+                $isContractor = $this->isContractorByTitles(
+                    $emp->UnitTitle ?? null,
+                    $emp->PostTitle ?? null,
+                    $emp->JobTitle ?? null
+                );
+
+                $employeeType = $isContractor ? 'contractor' : 'personnel';
+
                 $user = User::where('personnel_code', $emp->PersonnelCode)->first();
 
                 if ($user) {
+                    $oldType = $user->employee_type ?? 'personnel';
+
                     // به‌روزرسانی کاربر موجود
                     $user->update([
                         'name'           => $emp->FullName ?? $user->name,
                         'mobile'         => $emp->Mobile ?? $user->mobile,
                         'email'          => $this->sanitizeEmail($emp->Email, $emp->PersonnelCode, $user->id),
                         'national_code'  => $emp->NationalID ?? $user->national_code,
+                        'employee_type'  => $employeeType,
                     ]);
+
+                    // ✅ پیمانکار باید همیشه غیرفعال باشد
+                    if ($isContractor && $user->is_active) {
+                        $user->update([
+                            'is_active' => false,
+                        ]);
+
+                        // حذف توکن‌های قبلی برای جلوگیری از دسترسی
+                        $user->tokens()->delete();
+                    }
+
+                    // ✅ اگر قبلاً پیمانکار بوده و الان پرسنل شده، فعال شود
+                    if (!$isContractor && $oldType === 'contractor' && !$user->is_active) {
+                        $user->update([
+                            'is_active' => true,
+                        ]);
+                    }
+
                     $stats['updated']++;
                 } else {
                     if ($this->isDuplicateUser($emp)) {
@@ -382,18 +443,42 @@ class GtarabarSyncService
                     $user = User::create([
                         'name'           => $emp->FullName ?? 'کاربر ' . $emp->PersonnelCode,
                         'mobile'         => $emp->Mobile,
-                        // ✅ email یکتا: اگر خالی بود، با personnel_code تولید کن
                         'email'          => $this->sanitizeEmail($emp->Email, $emp->PersonnelCode),
                         'national_code'  => $emp->NationalID,
                         'personnel_code' => $emp->PersonnelCode,
-                        'password'       => Hash::make($emp->NationalID ?? $emp->PersonnelCode),
+                        'employee_type'  => $employeeType,
+
+                        // ✅ پیمانکار فعال نمی‌شود
+                        'is_active'      => !$isContractor,
+
+                        // ✅ برای پیمانکار رمز تصادفی می‌گذاریم
+                        'password'       => $isContractor
+                            ? Hash::make(Str::random(32))
+                            : Hash::make($emp->NationalID ?? $emp->PersonnelCode),
                     ]);
+
                     $stats['created']++;
                 }
 
-                if ($user && !$user->hasRole($roleName)) {
-                    $user->assignRole($roleName);
-                    $stats['roles_assigned']++;
+                // ✅ مدیریت نقش‌ها
+                if ($user) {
+                    $targetRole = $isContractor ? $contractorRole->name : $personnelRole->name;
+                    $otherRole  = $isContractor ? $personnelRole->name : $contractorRole->name;
+
+                    if ($user->hasRole($otherRole)) {
+                        $user->removeRole($otherRole);
+                    }
+
+                    if (!$user->hasRole($targetRole)) {
+                        $user->assignRole($targetRole);
+                        $stats['roles_assigned']++;
+                    }
+                }
+
+                if ($isContractor) {
+                    $stats['contractors']++;
+                } else {
+                    $stats['personnel']++;
                 }
 
                 if ($progressCallback) {
@@ -481,14 +566,10 @@ class GtarabarSyncService
         return $stats;
     }
 
-
-
-
-
 // ─────────────────────────────────────────────
 //  sync تاریخچه احکام (سمت‌های گذشته)
 // ─────────────────────────────────────────────
-public function syncStatuteHistory(User $user): int
+    public function syncStatuteHistory(User $user): int
     {
     $position = EmployeePosition::where('user_id', $user->id)->first();
 
@@ -564,6 +645,95 @@ public function syncStatuteHistory(User $user): int
         Log::error("syncStatuteHistory({$user->id}) failed: {$e->getMessage()}");
         return 0;
     }
+    }
+
+// ─────────────────────────────────────────────
+//  منطق تشخیص پیمانکار
+// ─────────────────────────────────────────────
+
+    /**
+     * کلمات کلیدی برای تشخیص پیمانکار
+     */
+    protected function getContractorKeywords(): array
+    {
+        return [
+            'پیمانکاری',
+        ];
+    }
+
+    /**
+     * نام نقش پیمانکاران
+     */
+    protected function getContractorRoleName(): string
+    {
+        return 'پیمانکار';
+    }
+
+    /**
+     * نرمال‌سازی متن فارسی برای مقایسه
+     * با توجه به کالیشن Persian_100_CI_AI، مقایسه را در PHP انجام می‌دهیم
+     * تا تفاوت ی/ي، ک/ك و نیم‌فاصله مشکل‌ساز نشود.
+     */
+    protected function normalizePersian(?string $text): string
+    {
+        if ($text === null) {
+            return '';
+        }
+
+        $text = trim($text);
+
+        $map = [
+            'ي' => 'ی',
+            'ك' => 'ک',
+            'أ' => 'ا',
+            'إ' => 'ا',
+            'ؤ' => 'و',
+            'ة' => 'ه',
+            "\u{200C}" => '', // نیم‌فاصله
+            "\u{200B}" => '', // zero-width space
+        ];
+
+        $text = strtr($text, $map);
+
+        // تبدیل فاصله‌های متعدد به یک فاصله
+        $text = preg_replace('/\s+/', ' ', $text);
+
+        return $text;
+    }
+
+    /**
+     * آیا این سه عنوان (واحد، پست، شغل) مربوط به پیمانکار است؟
+     *
+     * قانون: هر سه فیلد باید کلمه کلیدی «پیمانکاری» داشته باشند.
+     * اگر حتی یکی از آن‌ها فاقد کلمه کلیدی باشد، کاربر پیمانکار نیست.
+     */
+    public function isContractorByTitles(
+        ?string $unitTitle,
+        ?string $postTitle,
+        ?string $jobTitle
+    ): bool {
+        $unit = $this->normalizePersian($unitTitle);
+        $post = $this->normalizePersian($postTitle);
+        $job  = $this->normalizePersian($jobTitle);
+
+        // اگر هر کدام از عناوین خالی بود، نمی‌توان پیمانکار تشخیص داد
+        if ($unit === '' || $post === '' || $job === '') {
+            return false;
+        }
+
+        foreach ($this->getContractorKeywords() as $keyword) {
+            $normalizedKeyword = $this->normalizePersian($keyword);
+
+            if (
+                str_contains($unit, $normalizedKeyword)
+                && str_contains($post, $normalizedKeyword)
+                && str_contains($job, $normalizedKeyword)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

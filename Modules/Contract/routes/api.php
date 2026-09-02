@@ -6,7 +6,7 @@ use Modules\Contract\App\Http\Controllers\ContractorController;
 use Modules\Contract\App\Http\Controllers\ContractController;
 use Modules\Contract\App\Http\Controllers\ProgressReportController;
 
-Route::middleware('auth:sanctum')->prefix('v1')->group(function ()
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->group(function ()
 {
 
     Route::apiResource('contracts', ContractController::class);

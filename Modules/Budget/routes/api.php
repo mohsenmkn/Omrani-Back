@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Budget\App\Http\Controllers\BudgetController;
 
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function (){
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->name('api.')->group(function (){
 
     Route::get('budgets', [BudgetController::class, 'index'])->name('budgets.index');
     Route::post('budgets', [BudgetController::class, 'store'])->name('budgets.store');

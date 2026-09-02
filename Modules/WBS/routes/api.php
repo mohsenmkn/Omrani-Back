@@ -17,7 +17,7 @@ use Modules\WBS\App\Http\Controllers\WbsItemController;
     |
 */
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->name('api.')->group(function () {
     Route::get('/wbs/tree', [WbsItemController::class, 'tree']);
     Route::apiResource('wbs', WbsItemController::class);
     Route::prefix('wbs/{wbsItem}')->group(function () {

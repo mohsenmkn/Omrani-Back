@@ -6,7 +6,7 @@ use Modules\Acl\App\Http\Controllers\AclController;
 
 
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1')->name('api.')->group(function () {
     Route::get('acl/roles/', [AclController::class, 'index']);
     Route::get('acl/roles/all', [AclController::class, 'getAllRoles'])->middleware('permission:roles.update');
     Route::get('acl/permissions/all', [AclController::class, 'getAllPermissions'])->middleware('permission:roles.update');

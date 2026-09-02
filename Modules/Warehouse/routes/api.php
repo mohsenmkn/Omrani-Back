@@ -7,7 +7,7 @@ use Modules\Warehouse\App\Http\Controllers\WarehouseTransactionController;
 use Modules\Warehouse\App\Http\Controllers\InventoryReportController;
 
 Route::prefix('v1')
-    ->middleware('auth:sanctum')
+    ->middleware(['auth:sanctum', 'user.can_login'])
     ->group(function () {
 
         // Categories

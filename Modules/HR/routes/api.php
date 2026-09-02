@@ -17,7 +17,7 @@ use Modules\HR\App\Http\Controllers\OrgStructureController;
     |
 */
 
-Route::middleware(['auth:sanctum'])->prefix('v1/hr')->name('hr.')->group(function () {
+Route::middleware(['auth:sanctum', 'user.can_login'])->prefix('v1/hr')->name('hr.')->group(function () {
     // ─────────────────────────────────────────────
     //  چارت سازمانی
     // ─────────────────────────────────────────────
