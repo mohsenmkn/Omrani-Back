@@ -15,43 +15,135 @@ use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    public function index(Request $request)
-    {
-        $perPage = (int) $request->input('per_page', 15);
 
-        $query = EmployeePosition::query()
-            ->with(['user', 'unit'])
-            ->when($request->filled('search'), function ($q) use ($request) {
-                $search = trim($request->input('search'));
-                $q->where(function ($q) use ($search) {
-                    $q->where('post_title', 'like', "%{$search}%")
-                        ->orWhere('job_title', 'like', "%{$search}%")
-                        ->orWhere('personnel_code', 'like', "%{$search}%")
-                        ->orWhereHas('user', function ($q) use ($search) {
-                            $q->where('name', 'like', "%{$search}%")
-                                ->orWhere('mobile', 'like', "%{$search}%");
-                        });
-                });
-            })
-            ->when($request->filled('unit_id'), function ($q) use ($request) {
-                $q->where('organizational_unit_id', $request->input('unit_id'));
-            })
-            ->when($request->filled('employee_type'), function ($q) use ($request) {
-                $q->whereHas('user', function ($q) use ($request) {
-                    $q->where('employee_type', $request->input('employee_type'));
-                });
-            })
-            ->when($request->has('is_active') && $request->input('is_active') !== '', function ($q) use ($request) {
-                $q->whereHas('user', function ($q) use ($request) {
-                    $q->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
-                });
-            })
-            ->latest();
+public function index(Request $request)
+{
+    $perPage = max(1, min((int) $request->input('per_page', 15), 100));
 
-        $positions = $query->paginate($perPage);
+    $query = EmployeePosition::query()
+        ->with([
+            // اطلاعات کاربر
+            'user.roles',
 
-        return response()->json($positions);
-    }
+            // واحد سازمانی
+            'unit',
+        ])
+
+        // جستجو
+        ->when($request->filled('search'), function ($q) use ($request) {
+            $search = trim($request->input('search'));
+
+            $q->where(function ($q) use ($search) {
+
+                // اطلاعات پست
+                $q->where('post_title', 'like', "%{$search}%")
+                    ->orWhere('job_title', 'like', "%{$search}%")
+                    ->orWhere('personnel_code', 'like', "%{$search}%")
+
+                    // اطلاعات کاربر
+                    ->orWhereHas('user', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%")
+                            ->orWhere('mobile', 'like', "%{$search}%")
+                            ->orWhere('national_code', 'like', "%{$search}%")
+                            ->orWhere('personnel_code', 'like', "%{$search}%");
+                    });
+            });
+        })
+
+        // فیلتر واحد سازمانی
+        ->when($request->filled('unit_id'), function ($q) use ($request) {
+            $q->where(
+                'organizational_unit_id',
+                $request->input('unit_id')
+            );
+        })
+
+        // فیلتر نوع کاربر
+        ->when($request->filled('employee_type'), function ($q) use ($request) {
+            $q->whereHas('user', function ($q) use ($request) {
+                $q->where(
+                    'employee_type',
+                    $request->input('employee_type')
+                );
+            });
+        })
+
+        // فیلتر وضعیت فعال / غیرفعال
+        ->when(
+            $request->has('is_active')
+            && $request->input('is_active') !== '',
+            function ($q) use ($request) {
+
+                $isActive = filter_var(
+                    $request->input('is_active'),
+                    FILTER_VALIDATE_BOOLEAN
+                );
+
+                $q->whereHas('user', function ($q) use ($isActive) {
+                    $q->where('is_active', $isActive);
+                });
+            }
+        )
+
+        // جدیدترین‌ها ابتدا
+        ->latest();
+
+    $positions = $query->paginate($perPage);
+
+    /*
+     * خروجی را به شکلی برمی‌گردانیم که
+     * Frontend بتواند مستقیماً اطلاعات User را مصرف کند.
+     */
+    $positions->getCollection()->transform(function ($position) {
+
+        return [
+            'id'              => $position->id,
+
+            // اطلاعات پرسنلی
+            'personnel_code'  => $position->personnel_code,
+
+            // اطلاعات پست
+            'post_title'      => $position->post_title,
+            'job_title'       => $position->job_title,
+
+            // واحد سازمانی
+            'unit'            => $position->unit
+                ? [
+                    'id'    => $position->unit->id,
+                    'title' => $position->unit->title,
+                ]
+                : null,
+
+            // اطلاعات User
+            'user'            => $position->user
+                ? [
+                    'id'             => $position->user->id,
+                    'name'           => $position->user->name,
+                    'mobile'         => $position->user->mobile,
+                    'national_code'  => $position->user->national_code,
+                    'personnel_code' => $position->user->personnel_code,
+                    'email'          => $position->user->email,
+                    'employee_type'  => $position->user->employee_type,
+                    'is_active'      => (bool) $position->user->is_active,
+
+                    // ⭐ نقش‌های کاربر
+                    'roles'          => $position->user->roles
+                        ->map(function ($role) {
+                            return [
+                                'id'   => $role->id,
+                                'name' => $role->name,
+                            ];
+                        })
+                        ->values(),
+                ]
+                : null,
+        ];
+    });
+
+    return response()->json($positions);
+}
+
+
 
     // ایجاد کاربر جدید
     public function store(Request $request)
