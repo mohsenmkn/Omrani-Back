@@ -47,7 +47,14 @@ return [
             'view_department',// مشاهده فرآیندهای واحد
             'export',         // خروجی Excel
         ],
+        //شکایات
         'complaintmanagers' => ['read', 'create', 'update', 'delete'],  // ✅ جدید
+
+        //شایستگی
+        'assessment' => ['view', 'evaluate', 'manage', 'approve'],
+
+        'system_settings' => ['manage_database', 'manage_general'],
+
 
     ],
     'labels' => [
@@ -87,7 +94,9 @@ return [
             'virtual_secretariat' => 'دبیرخانه مجازی',
             'workflow_dashboard' => 'داشبورد فرآیندها',
             'complaintmanagers' => 'مسئولین پیگیری شکایات',  // ✅ جدید
-
+            // در بخش labels.module_names:
+            'assessment' => 'ارزیابی عملکرد و شایستگی',
+            'system_settings_SqlServer' => 'تنظیمات Sql Server',
 
 
         ],
@@ -112,6 +121,10 @@ return [
             'view_all' => 'مشاهده همه فرآیندها',
             'view_department' => 'مشاهده فرآیندهای واحد',
             'review' => 'بررسی و پاسخ به شکایات ارجاع‌شده',  // ✅ جدید
+            // در بخش labels.actions:
+            'evaluate' => 'ثبت ارزیابی',
+            'manage_database' => 'مدیریت اتصالات دیتابیس',
+            'manage_general'  => 'تنظیمات عمومی سیستم',
         ],
     ]
 
