@@ -55,6 +55,26 @@ return [
 
         'system_settings' => ['manage_database', 'manage_general'],
 
+        'groups' => ['read', 'create', 'update', 'delete', 'assign_users'],
+
+
+        // ✅ ماژول جدید: Warehouse_Gtrabar
+        'warehouse_gtrabar' => [
+            'view',           // مشاهده کلی ماژول
+            'manage',         // مدیریت کامل
+            'stock_view',     // مشاهده موجودی انبار
+            'equipment_view', // مشاهده تجهیزات
+            'equipment_manage', // مدیریت تجهیزات (ایجاد، ویرایش، حذف)
+            'part_trace_view', // مشاهده ردیابی قطعات
+            'part_trace_manage', // مدیریت نصب/خروج قطعات
+        ],
+
+
+        'finance' => ['view', 'manage'],
+        'equipment_costs' => ['view', 'export', 'manage'],
+
+
+
 
     ],
     'labels' => [
@@ -97,6 +117,11 @@ return [
             // در بخش labels.module_names:
             'assessment' => 'ارزیابی عملکرد و شایستگی',
             'system_settings_SqlServer' => 'تنظیمات Sql Server',
+            'groups' => 'گروه‌های کاربری',
+            'warehouse_gtrabar' => 'انبار (Gtrabar)',
+
+            'finance' => 'ماژول مالی',
+            'equipment_costs' => 'گزارش هزینه تجهیزات',
 
 
         ],
@@ -125,6 +150,15 @@ return [
             'evaluate' => 'ثبت ارزیابی',
             'manage_database' => 'مدیریت اتصالات دیتابیس',
             'manage_general'  => 'تنظیمات عمومی سیستم',
+            'assign_users' => 'اختصاص کاربران',
+
+
+            // ✅ اکشن‌های ماژول Warehouse_Gtrabar
+            'stock_view' => 'مشاهده موجودی انبار',
+            'equipment_view' => 'مشاهده تجهیزات',
+            'equipment_manage' => 'مدیریت تجهیزات',
+            'part_trace_view' => 'مشاهده ردیابی قطعات',
+            'part_trace_manage' => 'مدیریت نصب/خروج قطعات',
         ],
     ]
 

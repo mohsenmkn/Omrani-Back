@@ -177,17 +177,27 @@ public function index(Request $request)
             'password'       => Hash::make($validated['password']),
             'national_code'  => $validated['national_code'] ?? null,
             'personnel_code' => $validated['personnel_code'] ?? null,
-
-            /**
-             * کاربر دستی فعلاً پرسنل در نظر گرفته می‌شود.
-             * پیمانکاران از سینک گستراب تعیین نوع می‌شوند.
-             */
             'employee_type'  => 'personnel',
-
+            'group_ids'   => ['nullable', 'array'],
+            'group_ids.*' => ['integer', 'exists:groups,id'],
             'is_active'      => array_key_exists('is_active', $validated)
                 ? (bool) $validated['is_active']
                 : true,
         ]);
+        if ($request->has('group_ids')) {
+            $user->groups()->sync(
+                collect($validated['group_ids'] ?? [])
+                    ->mapWithKeys(fn ($id) => [
+                        $id => [
+                            'assigned_by' => auth()->id(),
+                            'assigned_at' => now(),
+                        ]
+                    ])
+            );
+            app(\Modules\Acl\App\Services\GroupSyncService::class)
+                ->syncUserRoles($user);
+        }
+
 
         if ($request->has('roles')) {
             $user->syncRoles($validated['roles'] ?? []);
@@ -246,6 +256,19 @@ public function index(Request $request)
                     'personnel_code',
                 ])
                 ->toArray();
+            if ($request->has('group_ids')) {
+                $user->groups()->sync(
+                    collect($validated['group_ids'] ?? [])
+                        ->mapWithKeys(fn ($id) => [
+                            $id => [
+                                'assigned_by' => auth()->id(),
+                                'assigned_at' => now(),
+                            ]
+                        ])
+                );
+                app(\Modules\Acl\App\Services\GroupSyncService::class)
+                    ->syncUserRoles($user);
+            }
 
             if (!empty($validated['password'])) {
                 $dataToUpdate['password'] = Hash::make($validated['password']);
@@ -322,6 +345,140 @@ public function index(Request $request)
         $user = User::findOrFail($id);
         $user->delete();
         return response()->json(['message' => 'کاربر با موفقیت حذف شد'],200);
+    }
+
+
+
+    /**
+     * دریافت لیست کاربران قابل انتخاب برای گروه‌ها
+     * با قابلیت فیلتر بر اساس سمت، واحد و جستجوی عمومی
+     */
+    public function selectable(Request $request)
+    {
+        $request->validate([
+            'search'         => ['nullable', 'string', 'max:100'],
+            'position_search'=> ['nullable', 'string', 'max:100'],
+            'unit_id'        => ['nullable', 'integer', 'exists:organizational_units,id'],
+            'is_active'      => ['nullable', 'boolean'],
+            'exclude_group'  => ['nullable', 'integer', 'exists:groups,id'],
+            'per_page'       => ['nullable', 'integer', 'max:200'],
+        ]);
+
+        $perPage = min((int) $request->input('per_page', 100), 200);
+
+        $query = EmployeePosition::query()
+            ->with(['user', 'unit'])
+            // فقط کاربران فعال و غیر پیمانکار
+            ->whereHas('user', function ($q) use ($request) {
+                $q->where('is_active', true)
+                    ->where('employee_type', '!=', 'contractor');
+
+                if ($request->filled('search')) {
+                    $search = trim($request->input('search'));
+                    $q->where(function ($q2) use ($search) {
+                        $q2->where('name', 'like', "%{$search}%")
+                            ->orWhere('mobile', 'like', "%{$search}%")
+                            ->orWhere('national_code', 'like', "%{$search}%")
+                            ->orWhere('personnel_code', 'like', "%{$search}%");
+                    });
+                }
+            })
+            // فیلتر سمت (post_title یا job_title)
+            ->when($request->filled('position_search'), function ($q) use ($request) {
+                $pos = trim($request->input('position_search'));
+                $q->where(function ($q2) use ($pos) {
+                    $q2->where('post_title', 'like', "%{$pos}%")
+                        ->orWhere('job_title', 'like', "%{$pos}%");
+                });
+            })
+            // فیلتر واحد سازمانی
+            ->when($request->filled('unit_id'), function ($q) use ($request) {
+                $q->where('organizational_unit_id', $request->input('unit_id'));
+            })
+            // حذف اعضای گروه فعلی (اختیاری)
+            ->when($request->filled('exclude_group'), function ($q) use ($request) {
+                $q->whereDoesntHave('user.groups', function ($q2) use ($request) {
+                    $q2->where('groups.id', $request->input('exclude_group'));
+                });
+            })
+            ->latest();
+
+        $positions = $query->paginate($perPage);
+
+        // تبدیل به فرمت مناسب فرانت
+        $positions->getCollection()->transform(function ($position) {
+            $user = $position->user;
+            if (!$user) return null;
+
+            return [
+                'id'             => $user->id,
+                'name'           => $user->name,
+                'mobile'         => $user->mobile,
+                'personnel_code' => $user->personnel_code ?? $position->personnel_code,
+                'post_title'     => $position->post_title,
+                'job_title'      => $position->job_title,
+                'unit_id'        => $position->organizational_unit_id,
+                'unit_title'     => $position->unit?->title,
+                // متن نمایشی برای MultiSelect
+                'display_label'  => sprintf(
+                    '%s — %s — %s',
+                    $user->name,
+                    $position->post_title ?: $position->job_title ?: 'بدون سمت',
+                    $position->unit?->title ?: 'بدون واحد'
+                ),
+            ];
+        });
+
+        // حذف موارد null
+        $positions->setCollection(
+            $positions->getCollection()->filter()->values()
+        );
+
+        return response()->json($positions);
+    }
+
+    /**
+     * دریافت لیست سمت‌های پرکاربرد (برای dropdown فیلتر)
+     */
+    public function positions()
+    {
+        $positions = EmployeePosition::query()
+            ->select('post_title')
+            ->whereNotNull('post_title')
+            ->where('post_title', '!=', '')
+            ->distinct()
+            ->orderBy('post_title')
+            ->limit(100)
+            ->pluck('post_title');
+
+        return response()->json(['data' => $positions]);
+    }
+
+
+    // در Modules/Acl/App/Http/Controllers/GroupController.php
+
+    public function users(Group $group): JsonResponse
+    {
+        $users = $group->users()
+            ->with('employeePosition.unit')
+            ->get(['users.*'])
+            ->map(function ($u) {
+                $position = $u->employeePosition;
+                return [
+                    'id'             => $u->id,
+                    'name'           => $u->name,
+                    'mobile'         => $u->mobile,
+                    'personnel_code' => $u->personnel_code,
+                    'post_title'     => $position?->post_title,
+                    'job_title'      => $position?->job_title,
+                    'unit_title'     => $position?->unit?->title,
+                    'is_active'      => (bool) $u->is_active,
+                    'assigned_at'    => $u->pivot->assigned_at,
+                    'assigned_by'    => $u->pivot->assigned_by,
+                ];
+            });
+
+        return response()->json(['data' => $users]);
     }
 
 

@@ -7,9 +7,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Assessment\App\Models\Assessment;
 use Modules\Assessment\App\Models\AssessmentMethod;
+use Modules\Assessment\App\Models\AssessmentPeriod;
 use Modules\Assessment\App\Models\AssessmentPost;
 use Modules\Assessment\App\Models\AssessmentQuestion;
 use Modules\Assessment\App\Models\AssessmentCategory;
+use Modules\Assessment\App\Services\AssessmentAutoAssignService;
 use Modules\Assessment\App\Services\AssessmentService;
 
 class AssessmentController extends Controller
@@ -27,15 +29,81 @@ class AssessmentController extends Controller
         if ($user->can('assessment.manage')) {
             if ($request->filled('cycle_id')) $query->where('cycle_id', $request->cycle_id);
             if ($request->filled('status'))   $query->where('status', $request->status);
-        } elseif ($user->can('assessment.evaluate')) {
-            $query->where('evaluator_user_id', $user->id);
-        } else {
-            // کارمند: فقط ارزیابی‌های تاییدشده خودش
+        }
+        elseif ($user->can('assessment.evaluate')) {
+            // ۱. پیدا کردن واحد سازمانی ارزیاب
+            $evaluatorPosition = \Modules\HR\App\Models\EmployeePosition::where('user_id', $user->id)->first();
+            $evaluatorUnitId = $evaluatorPosition?->organizational_unit_id;
+
+            // ۲. دریافت لیست تمام واحدهای زیرمجموعه (و خود واحد)
+            $allowedUnitIds = $this->getSubordinateUnitIds($evaluatorUnitId);
+
+            if (!empty($allowedUnitIds)) {
+                // ۳. پیدا کردن user_id های مجاز فقط بر اساس واحدهای سازمانی مجاز
+                $validEmployeeIds = \Modules\HR\App\Models\EmployeePosition::whereIn('organizational_unit_id', $allowedUnitIds)
+                    ->pluck('user_id')
+                    ->unique();
+
+                // ۴. فیلتر نهایی: هم ارزیاب باید کاربر فعلی باشد، هم کارمند باید در واحدهای مجاز باشد
+                $query->where('evaluator_user_id', $user->id)
+                    ->whereIn('employee_user_id', $validEmployeeIds);
+            } else {
+                // اگر واحد سازمانی برای ارزیاب تعریف نشده باشد، لیست را عمداً خالی برمی‌گردانیم
+                $query->where('evaluator_user_id', $user->id)
+                    ->where('employee_user_id', -1);
+            }
+        }
+        else {
+            // کارمند عادی: فقط ارزیابی‌های تاییدشده خودش
             $query->where('employee_user_id', $user->id)
                 ->where('status', Assessment::STATUS_APPROVED);
         }
 
         return response()->json(['assessments' => $query->latest()->get()]);
+    }
+
+    /**
+     * دریافت بازگشتی تمام ID واحدهای سازمانی زیرمجموعه یک واحد
+     */
+    private function getSubordinateUnitIds(?int $unitId): array
+    {
+        if (!$unitId) return [];
+
+        $ids = [$unitId];
+        $children = \Modules\HR\App\Models\OrganizationalUnit::where('parent_id', $unitId)->pluck('id');
+
+        foreach ($children as $childId) {
+            $ids = array_merge($ids, $this->getSubordinateUnitIds($childId));
+        }
+
+        return array_unique($ids);
+    }
+
+    /**
+     * ✅ دریافت تمام user_id های زیرمجموعه یک واحد سازمانی
+     */
+    private function getSubordinateUserIds(int $unitId): array
+    {
+        $unitIds = [$unitId];
+        $this->collectChildUnits($unitId, $unitIds);
+
+        return \Modules\HR\App\Models\EmployeePosition::whereIn('organizational_unit_id', $unitIds)
+            ->pluck('user_id')
+            ->unique()
+            ->toArray();
+    }
+
+    /**
+     * ✅ جمع‌آوری بازگشتی تمام واحدهای فرزند
+     */
+    private function collectChildUnits(int $parentId, array &$unitIds): void
+    {
+        $children = \Modules\HR\App\Models\OrganizationalUnit::where('parent_id', $parentId)->pluck('id');
+
+        foreach ($children as $childId) {
+            $unitIds[] = $childId;
+            $this->collectChildUnits($childId, $unitIds);
+        }
     }
 
     /**
@@ -628,6 +696,22 @@ class AssessmentController extends Controller
     }
 
 
+    public function autoAssign(AssessmentPeriod $period, AssessmentAutoAssignService $service): JsonResponse
+    {
+        if ($period->status !== 'draft') {
+            return response()->json([
+                'message' => 'فقط دوره‌های پیش‌نویس قابل تخصیص خودکار هستند.',
+            ], 422);
+        }
 
+        $result = $service->autoAssign($period);
+
+        return response()->json([
+            'message'    => 'تخصیص خودکار انجام شد.',
+            'assigned'   => $result['assigned'],
+            'unassigned' => $result['unassigned'],
+            'skipped'    => $result['skipped'],
+        ]);
+    }
 
 }

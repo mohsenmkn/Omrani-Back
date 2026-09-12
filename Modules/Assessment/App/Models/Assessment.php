@@ -11,8 +11,16 @@ use Modules\Auth\App\Models\User;
 class Assessment extends Model
 {
     protected $fillable = [
-        'cycle_id', 'employee_user_id', 'evaluator_user_id', 'post_id',
-        'status', 'submitted_at', 'approved_at', 'approved_by', 'notes',
+        'cycle_id',
+        'period_id',          // ✅ اضافه شد
+        'employee_user_id',
+        'evaluator_user_id',
+        'post_id',
+        'status',
+        'submitted_at',
+        'approved_at',
+        'approved_by',
+        'notes',
     ];
 
     protected $casts = [

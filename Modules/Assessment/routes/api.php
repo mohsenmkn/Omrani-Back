@@ -1,8 +1,10 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Assessment\App\Http\Controllers\AssessmentAssignmentController;
 use Modules\Assessment\App\Http\Controllers\AssessmentController;
 use Modules\Assessment\App\Http\Controllers\AssessmentCycleController;
+use Modules\Assessment\App\Http\Controllers\AssessmentPeriodController;
 
 Route::prefix('v1/assessment')->middleware(['auth:sanctum'])->group(function () {
 
@@ -99,5 +101,18 @@ Route::prefix('v1/assessment')->middleware(['auth:sanctum'])->group(function () 
         ->whereNumber('user')
         ->middleware('auth:sanctum');
 
+    //auto assessment
+    Route::post('/', [AssessmentPeriodController::class, 'store'])->name('store');
+    Route::post('/{period}/generate', [AssessmentPeriodController::class, 'generate'])->name('generate');
+    Route::get('/{period}', [AssessmentPeriodController::class, 'show'])->name('show');
+
+    Route::get('auto-assign/preview', [AssessmentAssignmentController::class, 'preview'])
+        ->middleware('permission:assessment.manage');
+    Route::post('auto-assign/execute', [AssessmentAssignmentController::class, 'execute'])
+        ->middleware('permission:assessment.manage');
+
+    Route::post('/periods/{period}/auto-assign', [AssessmentController::class, 'autoAssign'])
+        ->middleware('permission:assessment.manage')
+        ->name('periods.auto-assign');
 
 });

@@ -4,6 +4,7 @@ namespace Modules\Assessment\App\Providers;
 
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Modules\Assessment\App\Services\AssessmentBulkService;
 use Modules\Assessment\Console\Commands\ImportJobProfiles;
 
 class AssessmentServiceProvider extends ServiceProvider
@@ -34,6 +35,12 @@ class AssessmentServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([ImportJobProfiles::class]);
         }
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                \Modules\Assessment\App\Console\Commands\SyncHrPosts::class,
+            ]);
+        }
+        $this->app->singleton(AssessmentBulkService::class);
     }
 
     /**

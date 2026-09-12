@@ -23,5 +23,7 @@
     "Complaint": true,
     "VirtualSecretariat": true,
     "Assessment": true,
-    "SystemSettings": true
+    "SystemSettings": true,
+    "WarehouseGtrabar": true,
+    "Finance": true
 }

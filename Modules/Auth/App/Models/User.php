@@ -11,6 +11,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\HasApiTokens;
+use Modules\Acl\App\Models\Group;
 use Morilog\Jalali\Jalalian;
 use Modules\Document\App\Models\Document;
 use Modules\HR\App\Models\EmployeePosition;
@@ -1319,5 +1320,66 @@ class User extends Authenticatable
             ->orderByDesc('login_at')
             ->value('id');
     }
+
+
+
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Groups (ACL)
+    |--------------------------------------------------------------------------
+    */
+    public function getAllRolesCollection(): \Illuminate\Support\Collection
+    {
+        $roles = \DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_type', get_class($this))
+            ->where('model_has_roles.model_id', $this->id)
+            ->get(['roles.id', 'roles.name', 'model_has_roles.source']);
+
+        return $roles->map(function ($r) {
+            return [
+                'id'     => $r->id,
+                'name'   => $r->name,
+                'source' => $r->source, // 'direct' یا 'group:X'
+            ];
+        });
+    }
+
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Groups (ماژول Acl)
+    |--------------------------------------------------------------------------
+    */
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(Group::class, 'group_user')
+            ->withPivot(['assigned_by', 'assigned_at', 'note'])
+            ->withTimestamps();
+    }
+
+    /**
+     * دریافت همه نقش‌ها با مشخص شدن منبع (مستقیم یا از گروه)
+     */
+    public function getAllRolesWithSource(): array
+    {
+        $rows = \DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_type', get_class($this))
+            ->where('model_has_roles.model_id', $this->id)
+            ->get(['roles.id', 'roles.name', 'model_has_roles.source']);
+
+        return $rows->map(fn ($r) => [
+            'id'     => $r->id,
+            'name'   => $r->name,
+            'source' => $r->source, // 'direct' یا 'group:X'
+        ])->toArray();
+    }
+
+
+
 }
 
