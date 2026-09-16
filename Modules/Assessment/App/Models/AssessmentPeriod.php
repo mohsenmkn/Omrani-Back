@@ -1,15 +1,15 @@
 <?php
-
-
 namespace Modules\Assessment\App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Auth\App\Models\User;
 
 class AssessmentPeriod extends Model
 {
+    protected $table = 'assessment_periods';
+
     protected $fillable = [
         'title',
         'year',
@@ -24,7 +24,9 @@ class AssessmentPeriod extends Model
         'end_date' => 'date',
     ];
 
-    /* ──────────────────────────────── Relations ──────────────────────────────── */
+    const STATUS_DRAFT  = 'draft';
+    const STATUS_ACTIVE = 'active';
+    const STATUS_CLOSED = 'closed';
 
     public function creator(): BelongsTo
     {
@@ -41,26 +43,22 @@ class AssessmentPeriod extends Model
         return $this->hasMany(Assessment::class, 'period_id');
     }
 
-    /* ──────────────────────────────── Scopes ──────────────────────────────── */
-
     public function scopeActive($query)
     {
-        return $query->where('status', 'active');
+        return $query->where('status', self::STATUS_ACTIVE);
     }
 
     public function scopeDraft($query)
     {
-        return $query->where('status', 'draft');
+        return $query->where('status', self::STATUS_DRAFT);
     }
-
-    /* ──────────────────────────────── Accessors ──────────────────────────────── */
 
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
-            'draft' => 'پیش‌نویس',
-            'active' => 'فعال',
-            'closed' => 'بسته‌شده',
+            self::STATUS_DRAFT  => 'پیش‌نویس',
+            self::STATUS_ACTIVE => 'فعال',
+            self::STATUS_CLOSED => 'بسته شده',
             default => $this->status,
         };
     }

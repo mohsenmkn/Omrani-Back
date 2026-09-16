@@ -1,11 +1,11 @@
 <?php
-
 namespace Modules\Assessment\App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Assessment\App\Models\Assessment;
+use Modules\Assessment\App\Models\AssessmentAnswer;
 use Modules\Assessment\App\Models\AssessmentMethod;
 use Modules\Assessment\App\Models\AssessmentPeriod;
 use Modules\Assessment\App\Models\AssessmentPost;
@@ -19,91 +19,47 @@ class AssessmentController extends Controller
     public function __construct(private AssessmentService $service) {}
 
     /**
-     * لیست ارزیابی‌ها (اسکوپ بر اساس نقش)
+     * GET /assessment/assessments
+     * لیست ارزیابی‌های محول شده به کاربر فعلی
+     */
+    /**
+     * GET /assessment/assessments
+     * لیست ارزیابی‌های محول شده به کاربر فعلی
      */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Assessment::with(['employee', 'evaluator', 'post', 'cycle']);
 
-        if ($user->can('assessment.manage')) {
-            if ($request->filled('cycle_id')) $query->where('cycle_id', $request->cycle_id);
-            if ($request->filled('status'))   $query->where('status', $request->status);
-        }
-        elseif ($user->can('assessment.evaluate')) {
-            // ۱. پیدا کردن واحد سازمانی ارزیاب
-            $evaluatorPosition = \Modules\HR\App\Models\EmployeePosition::where('user_id', $user->id)->first();
-            $evaluatorUnitId = $evaluatorPosition?->organizational_unit_id;
+        // ✅ دریافت واحد سازمانی کاربر فعلی از جدول employee_positions
+        $userPosition = \Modules\HR\App\Models\EmployeePosition::where('user_id', $user->id)->first();
+        $userUnitId = $userPosition?->organizational_unit_id;
 
-            // ۲. دریافت لیست تمام واحدهای زیرمجموعه (و خود واحد)
-            $allowedUnitIds = $this->getSubordinateUnitIds($evaluatorUnitId);
+        $query = Assessment::with(['employee', 'evaluator', 'post', 'cycle'])
+            ->where('evaluator_user_id', $user->id);
 
-            if (!empty($allowedUnitIds)) {
-                // ۳. پیدا کردن user_id های مجاز فقط بر اساس واحدهای سازمانی مجاز
-                $validEmployeeIds = \Modules\HR\App\Models\EmployeePosition::whereIn('organizational_unit_id', $allowedUnitIds)
-                    ->pluck('user_id')
-                    ->unique();
+        // ✅ فیلتر بر اساس واحد سازمانی (اگر کاربر واحد دارد)
+        if ($userUnitId) {
+            // پیدا کردن user_id های پرسنل در همان واحد سازمانی
+            $employeeUserIds = \Modules\HR\App\Models\EmployeePosition::where('organizational_unit_id', $userUnitId)
+                ->pluck('user_id');
 
-                // ۴. فیلتر نهایی: هم ارزیاب باید کاربر فعلی باشد، هم کارمند باید در واحدهای مجاز باشد
-                $query->where('evaluator_user_id', $user->id)
-                    ->whereIn('employee_user_id', $validEmployeeIds);
-            } else {
-                // اگر واحد سازمانی برای ارزیاب تعریف نشده باشد، لیست را عمداً خالی برمی‌گردانیم
-                $query->where('evaluator_user_id', $user->id)
-                    ->where('employee_user_id', -1);
-            }
-        }
-        else {
-            // کارمند عادی: فقط ارزیابی‌های تاییدشده خودش
-            $query->where('employee_user_id', $user->id)
-                ->where('status', Assessment::STATUS_APPROVED);
+            // فیلتر ارزیابی‌ها بر اساس employee_user_id
+            $query->whereIn('employee_user_id', $employeeUserIds);
         }
 
-        return response()->json(['assessments' => $query->latest()->get()]);
-    }
-
-    /**
-     * دریافت بازگشتی تمام ID واحدهای سازمانی زیرمجموعه یک واحد
-     */
-    private function getSubordinateUnitIds(?int $unitId): array
-    {
-        if (!$unitId) return [];
-
-        $ids = [$unitId];
-        $children = \Modules\HR\App\Models\OrganizationalUnit::where('parent_id', $unitId)->pluck('id');
-
-        foreach ($children as $childId) {
-            $ids = array_merge($ids, $this->getSubordinateUnitIds($childId));
+        // فیلترهای اختیاری
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('cycle_id')) {
+            $query->where('cycle_id', $request->cycle_id);
         }
 
-        return array_unique($ids);
-    }
+        $assessments = $query->orderBy('created_at', 'desc')->get();
 
-    /**
-     * ✅ دریافت تمام user_id های زیرمجموعه یک واحد سازمانی
-     */
-    private function getSubordinateUserIds(int $unitId): array
-    {
-        $unitIds = [$unitId];
-        $this->collectChildUnits($unitId, $unitIds);
-
-        return \Modules\HR\App\Models\EmployeePosition::whereIn('organizational_unit_id', $unitIds)
-            ->pluck('user_id')
-            ->unique()
-            ->toArray();
-    }
-
-    /**
-     * ✅ جمع‌آوری بازگشتی تمام واحدهای فرزند
-     */
-    private function collectChildUnits(int $parentId, array &$unitIds): void
-    {
-        $children = \Modules\HR\App\Models\OrganizationalUnit::where('parent_id', $parentId)->pluck('id');
-
-        foreach ($children as $childId) {
-            $unitIds[] = $childId;
-            $this->collectChildUnits($childId, $unitIds);
-        }
+        return response()->json([
+            'assessments' => $assessments,
+        ]);
     }
 
     /**
@@ -157,7 +113,6 @@ class AssessmentController extends Controller
     public function show(Assessment $assessment): JsonResponse
     {
         $user = request()->user();
-
         $isManager   = $user->can('assessment.manage');
         $isEvaluator = $assessment->evaluator_user_id === $user->id;
         $isEmployee  = $assessment->employee_user_id === $user->id
@@ -169,44 +124,84 @@ class AssessmentController extends Controller
 
         $assessment->load(['employee', 'evaluator', 'post', 'cycle']);
 
-        return response()->json([
-            'assessment' => $assessment,
-            'categories' => $this->service->getForm($assessment),
-            'summary'    => [
-                'average_score'      => $assessment->average_score,
-                'total_weighted_gap' => $assessment->total_weighted_gap,
-                'gaps_count'         => $assessment->gaps()->count(),
-            ],
-        ]);
+        $data = $this->service->getForm($assessment);
+
+        return response()->json($data);
     }
 
     /**
      * ثبت نمرات + محاسبه گپ
      */
-    public function submit(Request $request, Assessment $assessment): JsonResponse
+//    public function submit(Request $request, Assessment $assessment): JsonResponse
+//    {
+//        $user = $request->user();
+//
+//        // 🔐 فقط ارزیابِ خودِ رکورد یا مدیر کل
+//        if (!$user->can('assessment.manage') && $assessment->evaluator_user_id !== $user->id) {
+//            return response()->json(['message' => 'فقط ارزیابِ تعیین‌شده می‌تواند این ارزیابی را ثبت کند.'], 403);
+//        }
+//
+//        // 🔒 فقط در حالت پیش‌نویس یا برگشت‌خورده قابل ویرایش
+//        if (!in_array($assessment->status, [Assessment::STATUS_DRAFT, Assessment::STATUS_REJECTED])) {
+//            return response()->json(['message' => 'این ارزیابی قابل ویرایش نیست.'], 422);
+//        }
+//
+//        $request->validate([
+//            'scores'   => 'required|array',
+//            'scores.*' => 'integer|between:1,5',
+//        ]);
+//
+//        $assessment = $this->service->submitAnswers($assessment, $request->scores);
+//
+//        return response()->json([
+//            'message'    => 'ارزیابی ثبت شد و وضعیت به «تکمیل شده» تغییر کرد.',
+//            'assessment' => $assessment,
+//        ]);
+//    }
+
+
+    /**
+     * POST /assessment/assessments/{id}/submit
+     * ثبت نمرات ارزیابی
+     */
+    public function submit(Request $request, int $id): JsonResponse
     {
-        $user = $request->user();
-
-        // 🔐 فقط ارزیابِ خودِ رکورد یا مدیر کل
-        if (!$user->can('assessment.manage') && $assessment->evaluator_user_id !== $user->id) {
-            return response()->json(['message' => 'فقط ارزیابِ تعیین‌شده می‌تواند این ارزیابی را ثبت کند.'], 403);
-        }
-
-        // 🔒 فقط در حالت پیش‌نویس یا برگشت‌خورده قابل ویرایش
-        if (!in_array($assessment->status, [Assessment::STATUS_DRAFT, Assessment::STATUS_REJECTED])) {
-            return response()->json(['message' => 'این ارزیابی قابل ویرایش نیست.'], 422);
-        }
-
         $request->validate([
-            'scores'   => 'required|array',
-            'scores.*' => 'integer|between:1,5',
+            'scores' => 'required|array',
+            'scores.*' => 'nullable|integer|min:1|max:5',
         ]);
 
-        $assessment = $this->service->submitAnswers($assessment, $request->scores);
+        $assessment = Assessment::findOrFail($id);
+
+        // بررسی دسترسی
+        if ($assessment->evaluator_user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'شما مجاز به ثبت نمرات این ارزیابی نیستید',
+            ], 403);
+        }
+
+        // ذخیره نمرات
+        foreach ($request->scores as $questionId => $score) {
+            AssessmentAnswer::updateOrCreate(
+                [
+                    'assessment_id' => $assessment->id,
+                    'question_id' => $questionId,
+                ],
+                [
+                    'score' => $score,
+                ]
+            );
+        }
+
+        // به‌روزرسانی وضعیت
+        $assessment->update([
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
 
         return response()->json([
-            'message'    => 'ارزیابی ثبت شد و وضعیت به «تکمیل شده» تغییر کرد.',
-            'assessment' => $assessment,
+            'message' => 'نمرات با موفقیت ثبت شد',
+            'assessment' => $assessment->fresh(),
         ]);
     }
 
@@ -317,11 +312,9 @@ class AssessmentController extends Controller
         return response()->json(['methods' => $query->orderBy('title')->get()]);
     }
 
-
     public function users(Request $request): JsonResponse
     {
         $q = $request->search;
-
         $users = \Modules\Auth\App\Models\User::query()
             ->when($q, fn($qq) => $qq
                 ->where('name', 'like', "%{$q}%")
@@ -333,7 +326,10 @@ class AssessmentController extends Controller
         return response()->json(['users' => $users]);
     }
 
-
+    /**
+     * GET /assessment/posts/{post}/questions
+     * سوالات شناسنامه به تفکیک منظر + آمار
+     */
     /**
      * GET /assessment/posts/{post}/questions
      * سوالات شناسنامه به تفکیک منظر + آمار
@@ -348,12 +344,16 @@ class AssessmentController extends Controller
         $total = $questions->count();
         $done  = $questions->whereNotNull('risk_level')->count();
 
+        // ✅ شمارش مناظر یکتا
+        $uniqueCategoriesCount = $questions->pluck('category_id')->unique()->count();
+
         return response()->json([
             'post' => $post,
             'stats' => [
-                'total'      => $total,
-                'risk_done'  => $done,
-                'completion' => $total ? round(($done / $total) * 100) : 0,
+                'total'               => $total,
+                'risk_done'           => $done,
+                'categories_count'    => $uniqueCategoriesCount, // ✅ اضافه شد
+                'completion'          => $total ? round(($done / $total) * 100) : 0,
             ],
             'categories' => $questions->groupBy('category.title')->map(fn($g) => [
                 'title'     => $g->first()->category?->title ?? 'سایر',
@@ -367,17 +367,20 @@ class AssessmentController extends Controller
      */
     public function updateQuestion(Request $request, AssessmentQuestion $question): JsonResponse
     {
-        $validated = $request->validate([
-            'required_score' => 'nullable|integer|between:1,5',
-            'risk_level'     => 'nullable|integer|between:1,5',
-            'fix_deadline'   => 'nullable|in:immediate,short_term,mid_term,long_term',
-            'title'          => 'nullable|string|max:1000',
-            'is_active'      => 'nullable|boolean',
+        $data = $request->validate([
+            'title' => 'required|string|max:500',
+            'category_id' => 'nullable|exists:assessment_categories,id',
+            'required_score' => 'nullable|integer|min:1|max:5',
+            'risk_level' => 'nullable|integer|min:1|max:5',  // ✅ باید integer باشد
+            'fix_deadline' => 'nullable|string',
         ]);
 
-        $question->update($validated);
+        $question->update($data);
 
-        return response()->json(['question' => $question->fresh()]);
+        return response()->json([
+            'message' => 'سوال با موفقیت ویرایش شد.',
+            'question' => $question->fresh(),
+        ]);
     }
 
     /**
@@ -401,8 +404,6 @@ class AssessmentController extends Controller
 
         return response()->json(['updated' => count($validated['items'])]);
     }
-
-
 
     /**
      * GET /assessment/categories
@@ -544,6 +545,7 @@ class AssessmentController extends Controller
     /**
      * GET /assessment/suggest-post?user_id=
      * پیشنهاد پست ارزیابی بر اساس پست فعلی کارمند در HR
+     * ✅ اصلاح شده: بر اساس grade + unit
      */
     public function suggestPost(Request $request): JsonResponse
     {
@@ -555,24 +557,23 @@ class AssessmentController extends Controller
             return response()->json(['post_id' => null, 'post_title' => null]);
         }
 
-        $normalized = $this->normalizeTitle($position->post_title);
+        $classifier = app(\Modules\Assessment\App\Services\JobFamilyClassifier::class);
+        $family = $classifier->classify($position->post_title);
 
-        $post = AssessmentPost::where('is_active', true)->get()
-            ->first(fn($p) => $this->normalizeTitle($p->title) === $normalized);
+        if (!$family) {
+            return response()->json(['post_id' => null, 'post_title' => $position->post_title]);
+        }
+
+        // ✅ جستجو بر اساس grade + unit
+        $post = AssessmentPost::findByGradeAndUnit($family, $position->unit?->title);
 
         return response()->json([
             'post_id'    => $post?->id,
-            'post_title' => $position->post_title,
+            'post_title' => $post?->title,
+            'family'     => $family,
+            'unit'       => $position->unit?->title,
         ]);
     }
-
-    private function normalizeTitle(string $t): string
-    {
-        $t = str_replace(['‌', '‏', '‎'], '', $t);
-        $t = preg_replace('/\s+/u', ' ', trim($t));
-        return mb_strtolower($t);
-    }
-
 
     /**
      * POST /assessment/methods
@@ -629,7 +630,6 @@ class AssessmentController extends Controller
             'disabled' => false,
         ]);
     }
-
 
     /**
      * GET /assessment/employees/{user}/report
@@ -695,7 +695,6 @@ class AssessmentController extends Controller
         ][$status] ?? $status;
     }
 
-
     public function autoAssign(AssessmentPeriod $period, AssessmentAutoAssignService $service): JsonResponse
     {
         if ($period->status !== 'draft') {
@@ -713,5 +712,178 @@ class AssessmentController extends Controller
             'skipped'    => $result['skipped'],
         ]);
     }
+
+    /**
+     * ✅ متد کمکی: دریافت بازگشتی تمام ID واحدهای سازمانی زیرمجموعه یک واحد
+     */
+    private function getSubordinateUnitIds(?int $unitId): array
+    {
+        if (!$unitId) return [];
+
+        $ids = [$unitId];
+        $children = \Modules\HR\App\Models\OrganizationalUnit::where('parent_id', $unitId)->pluck('id');
+
+        foreach ($children as $childId) {
+            $ids = array_merge($ids, $this->getSubordinateUnitIds($childId));
+        }
+
+        return array_unique($ids);
+    }
+
+
+    /**
+     * GET /assessment/posts/{post}
+     */
+    public function showPost(AssessmentPost $post): JsonResponse
+    {
+        $post->load(['questions.category']);
+
+        $stats = [
+            'total_questions'    => $post->questions()->count(),
+            'active_questions'   => $post->questions()->where('is_active', true)->count(),
+            'with_risk_level'    => $post->questions()->whereNotNull('risk_level')->count(),
+            'categories_count'   => $post->questions()->distinct('category_id')->count('category_id'),
+        ];
+
+        return response()->json([
+            'post'  => $post,
+            'stats' => $stats,
+        ]);
+    }
+
+    /**
+     * POST /assessment/import/preview
+     */
+    public function importPreview(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        $file = $request->file('file');
+        $originalName = $file->getClientOriginalName();
+        $tempPath = $file->getRealPath();
+
+        try {
+            $importer = app(\Modules\Assessment\App\Services\ExcelProfileImporter::class);
+            $result = $importer->importFile($tempPath, dryRun: true, originalFilename: $originalName);
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'خطا در پردازش فایل: ' . $e->getMessage(),
+                'stats' => ['files' => 0, 'sheets' => 0, 'questions' => 0, 'created' => 0, 'updated' => 0, 'posts' => 0],
+                'anomalies' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /assessment/import
+     */
+    public function importExcel(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls|max:10240',
+        ]);
+
+        $file = $request->file('file');
+        $originalName = $file->getClientOriginalName();
+        $tempPath = $file->getRealPath();
+
+        try {
+            $importer = app(\Modules\Assessment\App\Services\ExcelProfileImporter::class);
+            $result = $importer->importFile($tempPath, dryRun: false, originalFilename: $originalName);
+
+            return response()->json([
+                'message' => 'فایل با موفقیت import شد.',
+                'stats' => $result['stats'],
+                'anomalies' => $result['anomalies'],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'خطا در import: ' . $e->getMessage(),
+                'stats' => ['files' => 0, 'sheets' => 0, 'questions' => 0, 'created' => 0, 'updated' => 0, 'posts' => 0],
+                'anomalies' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /assessment/import/bulk
+     * import چند فایل از یک پوشه
+     */
+    public function importBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'directory' => 'required|string',
+        ]);
+
+        $directory = storage_path('app/' . $request->directory);
+        if (!is_dir($directory)) {
+            return response()->json(['message' => 'پوشه یافت نشد.'], 404);
+        }
+
+        $files = glob($directory . '/*.xlsx');
+        $importer = app(\Modules\Assessment\App\Services\ExcelProfileImporter::class);
+        $totalResult = ['stats' => [], 'anomalies' => []];
+
+        foreach ($files as $file) {
+            $result = $importer->importFile($file, dryRun: false);
+            $totalResult['stats'] = array_merge_recursive(
+                $totalResult['stats'],
+                $result['stats']
+            );
+            $totalResult['anomalies'] = array_merge(
+                $totalResult['anomalies'],
+                $result['anomalies']
+            );
+        }
+
+        return response()->json([
+            'message'   => count($files) . ' فایل import شد.',
+            'stats'     => $totalResult['stats'],
+            'anomalies' => $totalResult['anomalies'],
+        ]);
+    }
+
+    /**
+     * GET /assessment/dashboard/stats
+     * آمار داشبورد
+     */
+    public function dashboardStats(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $stats = [
+            'total_posts'         => \Modules\Assessment\App\Models\AssessmentPost::where('is_active', true)->count(),
+            'total_questions'     => \Modules\Assessment\App\Models\AssessmentQuestion::where('is_active', true)->count(),
+            'total_categories'    => \Modules\Assessment\App\Models\AssessmentCategory::where('is_active', true)->count(),
+            'total_methods'       => \Modules\Assessment\App\Models\AssessmentMethod::where('is_active', true)->count(),
+            'total_cycles'        => \Modules\Assessment\App\Models\AssessmentCycle::count(),
+            'active_cycles'       => \Modules\Assessment\App\Models\AssessmentCycle::where('status', 'active')->count(),
+            'total_periods'       => \Modules\Assessment\App\Models\AssessmentPeriod::count(),
+            'active_periods'      => \Modules\Assessment\App\Models\AssessmentPeriod::where('status', 'active')->count(),
+        ];
+
+        if ($user->can('assessment.evaluate') || $user->can('assessment.manage')) {
+            $stats['my_evaluations'] = \Modules\Assessment\App\Models\Assessment::where('evaluator_user_id', $user->id)->count();
+            $stats['pending_evaluations'] = \Modules\Assessment\App\Models\Assessment::where('evaluator_user_id', $user->id)
+                ->where('status', 'draft')->count();
+        }
+
+        return response()->json(['stats' => $stats]);
+    }
+
+
+
+
+
+
+
+
+
+
+
 
 }

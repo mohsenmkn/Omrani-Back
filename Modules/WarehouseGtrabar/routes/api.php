@@ -12,7 +12,7 @@ use Modules\WarehouseGtrabar\App\Http\Controllers\Api\StockController;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('api/v1/warehouse-gtrabar')->middleware('auth:sanctum')->group(function () {
+Route::prefix('warehouse-gtrabar')->middleware('auth:sanctum')->group(function () {
 
     // Stock Routes
     Route::get('/stock', [StockController::class, 'index']);
@@ -20,7 +20,7 @@ Route::prefix('api/v1/warehouse-gtrabar')->middleware('auth:sanctum')->group(fun
     Route::get('/parts/search', [StockController::class, 'searchParts']);
 
     // Equipment Routes
-    Route::apiResource('equipment', EquipmentController::class);
+    //Route::apiResource('equipment', EquipmentController::class);
 
     // Part Trace Routes
     Route::get('/part-trace', [PartTraceController::class, 'index']);

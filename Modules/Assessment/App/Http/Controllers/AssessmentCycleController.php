@@ -1,6 +1,4 @@
 <?php
-
-
 namespace Modules\Assessment\App\Http\Controllers;
 
 use App\Http\Controllers\Controller;

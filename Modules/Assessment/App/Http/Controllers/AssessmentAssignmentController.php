@@ -13,6 +13,9 @@ use Modules\HR\App\Models\OrganizationalUnit;
 
 class AssessmentAssignmentController extends Controller
 {
+    /**
+     * زنجیره ارزیابی: هر خانواده توسط چه خانواده‌ای ارزیابی می‌شود
+     */
     private const EVALUATOR_CHAIN = [
         'معاون' => 'مدیرعامل',
         'مدیر' => 'معاون',
@@ -25,30 +28,50 @@ class AssessmentAssignmentController extends Controller
         'کارگر' => 'سرپرست/کارشناس ارشد',
     ];
 
-    public function __construct(private JobFamilyClassifier $classifier)
-    {
+    public function __construct(
+        private JobFamilyClassifier $classifier
+    ) {
     }
 
+    /**
+     * GET /assessment/auto-assign/preview
+     * پیش‌نمایش تخصیص خودکار
+     */
     public function preview(Request $request): JsonResponse
     {
-        $plan = $this->buildPlan($request->query('cycle_id') ? (int)$request->query('cycle_id') : null);
+        $cycleId = $request->query('cycle_id') ? (int) $request->query('cycle_id') : null;
+
+        if (!$cycleId) {
+            return response()->json([
+                'message' => 'cycle_id الزامی است',
+            ], 422);
+        }
+
+        $plan = $this->buildPlan($cycleId);
+
         return response()->json([
             'rows' => $plan['rows'],
             'summary' => $plan['summary'],
         ]);
     }
 
+    /**
+     * POST /assessment/auto-assign/execute
+     * اجرای تخصیص خودکار
+     */
     public function execute(Request $request): JsonResponse
     {
         $request->validate([
             'cycle_id' => 'required|exists:assessment_cycles,id',
         ]);
 
-        $plan = $this->buildPlan((int)$request->input('cycle_id'));
+        $cycleId = (int) $request->input('cycle_id');
+        $plan = $this->buildPlan($cycleId);
+
         $created = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($plan, $request, &$created, &$skipped) {
+        DB::transaction(function () use ($plan, $cycleId, &$created, &$skipped) {
             foreach ($plan['rows'] as $row) {
                 if ($row['status'] !== 'ready') {
                     $skipped++;
@@ -57,7 +80,7 @@ class AssessmentAssignmentController extends Controller
 
                 $assessment = Assessment::firstOrCreate(
                     [
-                        'cycle_id' => $request->input('cycle_id'),
+                        'cycle_id' => $cycleId,
                         'employee_user_id' => $row['user_id'],
                     ],
                     [
@@ -78,12 +101,90 @@ class AssessmentAssignmentController extends Controller
         ]);
     }
 
-    private function buildPlan(?int $cycleId): array
+    /**
+     * ساخت برنامه تخصیص (پیش‌نمایش و اجرا مشترک)
+     */
+// در AssessmentAssignmentController.php
+//    private function buildPlan(int $cycleId): array
+//    {
+//        $positions = EmployeePosition::with(['user', 'unit'])
+//            ->whereNotNull('post_title')
+//            ->whereNotNull('organizational_unit_id')
+//            ->whereHas('user')
+//            ->get();
+//
+//        $profiles = AssessmentPost::where('is_active', true)->get();
+//        $byUnit = $positions->groupBy('organizational_unit_id');
+//        $units = OrganizationalUnit::all()->keyBy('id');
+//
+//        $existing = Assessment::where('cycle_id', $cycleId)
+//            ->pluck('employee_user_id')
+//            ->flip();
+//
+//        $rows = [];
+//        $summary = [
+//            'total' => 0, 'ready' => 0, 'exists' => 0,
+//            'no_profile' => 0, 'no_evaluator' => 0, 'out_of_scope' => 0,
+//        ];
+//
+//        foreach ($positions as $pos) {
+//            $summary['total']++;
+//
+//            $family = $this->classifier->classify($pos->post_title);
+//
+//            if (!$family) {
+//                $summary['out_of_scope']++;
+//                $rows[] = $this->row($pos, null, null, null, 'out_of_scope');
+//                continue;
+//            }
+//
+//            // ✅ بررسی نگاشت دستی (با اولویت بالاتر)
+//            $manualPost = \Modules\Assessment\App\Models\AssessmentPostMapping::findMappingForPosition(
+//                $pos->post_title,
+//                $pos->organizational_unit_id
+//            );
+//
+//            if ($manualPost) {
+//                $profile = $manualPost;
+//            } else {
+//                $unitTitle = $pos->unit?->title;
+//                $profile = $profiles->first(fn($p) => $p->grade === $family && $p->unit === $unitTitle)
+//                    ?? $profiles->first(fn($p) => $p->grade === $family);
+//            }
+//
+//            if (!$profile) {
+//                $summary['no_profile']++;
+//                $rows[] = $this->row($pos, $family, null, null, 'no_profile');
+//                continue;
+//            }
+//
+//            // ✅ یافتن ارزیاب با بررسی hierarchy واقعی
+//            $evaluator = $this->findEvaluator($pos, $family, $byUnit, $units);
+//
+//            if (!$evaluator) {
+//                $summary['no_evaluator']++;
+//                $rows[] = $this->row($pos, $family, $profile, null, 'no_evaluator');
+//                continue;
+//            }
+//
+//            if ($existing->has($pos->user_id)) {
+//                $summary['exists']++;
+//                $rows[] = $this->row($pos, $family, $profile, $evaluator, 'exists');
+//                continue;
+//            }
+//
+//            $summary['ready']++;
+//            $rows[] = $this->row($pos, $family, $profile, $evaluator, 'ready');
+//        }
+//
+//        return ['rows' => $rows, 'summary' => $summary];
+//    }
+
+    private function buildPlan(int $cycleId): array
     {
-        // ✅ اصلاح: فقط پوزیشن‌هایی که واحد سازمانی مشخص دارند پردازش می‌شوند
         $positions = EmployeePosition::with(['user', 'unit'])
             ->whereNotNull('post_title')
-            ->whereNotNull('organizational_unit_id') // <-- این خط حیاتی است
+            ->whereNotNull('organizational_unit_id')
             ->whereHas('user')
             ->get();
 
@@ -91,9 +192,9 @@ class AssessmentAssignmentController extends Controller
         $byUnit = $positions->groupBy('organizational_unit_id');
         $units = OrganizationalUnit::all()->keyBy('id');
 
-        $existing = $cycleId
-            ? Assessment::where('cycle_id', $cycleId)->pluck('employee_user_id')->flip()
-            : collect();
+        $existing = Assessment::where('cycle_id', $cycleId)
+            ->pluck('employee_user_id')
+            ->flip();
 
         $rows = [];
         $summary = [
@@ -103,6 +204,7 @@ class AssessmentAssignmentController extends Controller
 
         foreach ($positions as $pos) {
             $summary['total']++;
+
             $family = $this->classifier->classify($pos->post_title);
 
             if (!$family) {
@@ -111,8 +213,8 @@ class AssessmentAssignmentController extends Controller
                 continue;
             }
 
-            $profile = $profiles->first(fn($p) => $p->grade === $family && $p->unit === $pos->unit?->title)
-                ?? $profiles->first(fn($p) => $p->grade === $family);
+            // ✅ یافتن شناسنامه با اولویت‌بندی دقیق
+            $profile = $this->findProfile($pos, $family, $profiles);
 
             if (!$profile) {
                 $summary['no_profile']++;
@@ -141,6 +243,92 @@ class AssessmentAssignmentController extends Controller
         return ['rows' => $rows, 'summary' => $summary];
     }
 
+    /**
+     * ✅ یافتن شناسنامه با اولویت‌بندی دقیق
+     * ۱. نگاشت دستی بر اساس عنوان پست
+     * ۲. نگاشت دستی بر اساس واحد سازمانی
+     * ۳. شناسنامه با grade + unit دقیق
+     * ۴. شناسنامه فقط با grade (fallback)
+     */
+    private function findProfile($pos, string $family, $profiles): ?AssessmentPost
+    {
+        // ۱. بررسی نگاشت دستی بر اساس عنوان پست
+        $titleMapping = \Modules\Assessment\App\Models\AssessmentPostMapping::active()
+            ->where('mapping_type', 'title_pattern')
+            ->whereNotNull('post_title_pattern')
+            ->get()
+            ->first(function ($mapping) use ($pos) {
+                $pattern = str_replace('%', '.*', $mapping->post_title_pattern);
+                return preg_match('/^' . $pattern . '$/u', $pos->post_title) === 1;
+            });
+
+        if ($titleMapping) {
+            return $titleMapping->assessmentPost;
+        }
+
+        // ۲. بررسی نگاشت دستی بر اساس واحد سازمانی
+        $unitMapping = \Modules\Assessment\App\Models\AssessmentPostMapping::active()
+            ->where('mapping_type', 'unit')
+            ->where('organizational_unit_id', $pos->organizational_unit_id)
+            ->first();
+
+        if ($unitMapping) {
+            return $unitMapping->assessmentPost;
+        }
+
+        // . جستجوی شناسنامه با grade + unit دقیق
+        $unitTitle = $pos->unit?->title;
+
+        $exactMatch = $profiles->first(function ($p) use ($family, $unitTitle) {
+            return $p->grade === $family && $p->unit === $unitTitle;
+        });
+
+        if ($exactMatch) {
+            return $exactMatch;
+        }
+
+        // ۴. جستجو با domain (اگر unit دقیق پیدا نشد)
+        $domainMatch = $profiles->first(function ($p) use ($family, $pos) {
+            return $p->grade === $family && $p->domain === $pos->unit?->title;
+        });
+
+        if ($domainMatch) {
+            return $domainMatch;
+        }
+
+        // ۵. Fallback: فقط بر اساس grade (بدون فیلتر unit)
+        // ⚠️ این فقط برای مواردی است که واقعاً شناسنامه واحد ندارند
+        return null; // به جای برگرداندن اولین رکورد، null برمی‌گردانیم
+    }
+
+
+    /**
+     * ✅ یافتن ارزیاب در واحد سازمانی (با پیمایش به سمت بالا)
+     */
+    private function findEvaluator($pos, string $family, $byUnit, $units): ?array
+    {
+        $evaluatorFamily = self::EVALUATOR_CHAIN[$family] ?? null;
+        if (!$evaluatorFamily) return null;
+
+        $unitId = $pos->organizational_unit_id;
+
+        // ✅ فقط در همان واحد سازمانی جستجو کن (نه در والد)
+        $found = ($byUnit[$unitId] ?? collect())
+            ->where('user_id', '!=', $pos->user_id)
+            ->first(function ($p) use ($evaluatorFamily) {
+                return $this->classifier->classify($p->post_title) === $evaluatorFamily;
+            });
+
+        if ($found) {
+            return ['id' => $found->user_id, 'name' => $found->user?->name];
+        }
+
+        return null;
+    }
+
+    /**
+     * ساخت ردیف خروجی
+     */
     private function row($pos, ?string $family, ?AssessmentPost $profile, ?array $evaluator, string $status): array
     {
         return [
@@ -156,63 +344,5 @@ class AssessmentAssignmentController extends Controller
             'evaluator_name' => $evaluator['name'] ?? null,
             'status' => $status,
         ];
-    }
-
-    /**
-     * ✅ اصلاح شده: یافتن ارزیاب با بررسی hierarchy واقعی
-     */
-    /**
-     * یافتن ارزیاب از زنجیره: در واحد خودِ کارمند، سپس واحدهای والد
-     * ✅ اصلاح شده: بررسی اینکه ارزیاب واقعاً مدیر واحد است
-     */
-    private function findEvaluator($pos, string $family, $byUnit, $units): ?array
-    {
-        $evaluatorFamily = self::EVALUATOR_CHAIN[$family] ?? null;
-        if (!$evaluatorFamily) return null;
-
-        $unitIds = [];
-        $unitId = $pos->organizational_unit_id;
-
-        while ($unitId && isset($units[$unitId])) {
-            $unitIds[] = $unitId;
-            $unitId = $units[$unitId]->parent_id;
-        }
-
-        foreach ($unitIds as $uid) {
-            $found = ($byUnit[$uid] ?? collect())
-                ->where('user_id', '!=', $pos->user_id)
-                ->first(function ($p) use ($evaluatorFamily, $uid) {
-                    // ✅ بررسی اینکه ارزیاب واقعاً مدیر این واحد است
-                    return $this->isManagerOfUnit($p, $uid)
-                        && $this->classifier->classify($p->post_title) === $evaluatorFamily;
-                });
-
-            if ($found) {
-                return ['id' => $found->user_id, 'name' => $found->user?->name];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * ✅ متد جدید: بررسی اینکه آیا یک نفر مدیر یک واحد سازمانی است
-     */
-    private function isManagerOfUnit($position, int $unitId): bool
-    {
-        if ($position->organizational_unit_id !== $unitId) {
-            return false;
-        }
-
-        $title = mb_strtolower($position->post_title ?? '');
-        $managerKeywords = ['مدیر', 'رئیس', 'رییس', 'سرپرست', 'معاون', 'مدیرعامل'];
-
-        foreach ($managerKeywords as $keyword) {
-            if (mb_strpos($title, $keyword) !== false) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

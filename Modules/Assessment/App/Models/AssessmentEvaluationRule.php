@@ -1,6 +1,4 @@
 <?php
-
-
 namespace Modules\Assessment\App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -9,6 +7,8 @@ use Modules\Acl\App\Models\Group;
 
 class AssessmentEvaluationRule extends Model
 {
+    protected $table = 'assessment_evaluation_rules';
+
     protected $fillable = [
         'evaluator_group_id',
         'evaluated_group_id',

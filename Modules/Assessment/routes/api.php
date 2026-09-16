@@ -4,115 +4,158 @@ use Illuminate\Support\Facades\Route;
 use Modules\Assessment\App\Http\Controllers\AssessmentAssignmentController;
 use Modules\Assessment\App\Http\Controllers\AssessmentController;
 use Modules\Assessment\App\Http\Controllers\AssessmentCycleController;
+use Modules\Assessment\App\Http\Controllers\AssessmentMappingController;
 use Modules\Assessment\App\Http\Controllers\AssessmentPeriodController;
 
-Route::prefix('v1/assessment')->middleware(['auth:sanctum'])->group(function () {
+/*
+|--------------------------------------------------------------------------
+| Assessment Module Routes
+|--------------------------------------------------------------------------
+| پیشوند: /api/v1/assessment
+| احراز هویت: Laravel Sanctum
+*/
 
-    // ── چرخه‌ها ──
-    Route::get('cycles', [AssessmentCycleController::class, 'index'])
-        ->middleware('permission:assessment.manage');
-    Route::post('cycles', [AssessmentCycleController::class, 'store'])
-        ->middleware('permission:assessment.manage');
-    Route::post('cycles/{cycle}/activate', [AssessmentCycleController::class, 'activate'])
-        ->middleware('permission:assessment.manage');
-    Route::post('cycles/{cycle}/close', [AssessmentCycleController::class, 'close'])
-        ->middleware('permission:assessment.manage');
+Route::prefix('v1/assessment')
+    ->middleware(['auth:sanctum'])
+    ->group(function () {
 
-    // ── کاتالوگ‌ها ──
-    Route::get('users', [AssessmentController::class, 'users'])
-        ->middleware('permission:assessment.manage');
-    Route::get('posts', [AssessmentController::class, 'posts'])
-        ->middleware('permission:assessment.view');
-    Route::get('methods', [AssessmentController::class, 'methods'])
-        ->middleware('permission:assessment.view');
+        /* ═══════════════════════════════════════════════════
+           ۱. چرخه‌های ارزیابی (Cycles)
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('cycles')->group(function () {
+            Route::get('/', [AssessmentCycleController::class, 'index']);
+            Route::post('/', [AssessmentCycleController::class, 'store']);
+            Route::post('/{cycle}/activate', [AssessmentCycleController::class, 'activate']);
+            Route::post('/{cycle}/close', [AssessmentCycleController::class, 'close']);
+        })->middleware('permission:assessment.manage');
 
-    // ── شناسنامه‌ها ──
-    Route::get('posts/{post}/questions', [AssessmentController::class, 'postQuestions'])
-        ->middleware('permission:assessment.manage');
-    Route::put('questions/bulk', [AssessmentController::class, 'bulkUpdateQuestions'])
-        ->middleware('permission:assessment.manage');
-    Route::put('questions/{question}', [AssessmentController::class, 'updateQuestion'])
-        ->whereNumber('question')
-        ->middleware('permission:assessment.manage');
+        /* ═══════════════════════════════════════════════════
+           ۲. دوره‌های ارزیابی (Periods)
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('periods')->group(function () {
+            Route::get('/', [AssessmentPeriodController::class, 'index']);
+            Route::post('/', [AssessmentPeriodController::class, 'store']);
+            Route::get('/{period}', [AssessmentPeriodController::class, 'show']);
+            Route::put('/{period}', [AssessmentPeriodController::class, 'update']);
+            Route::post('/{period}/generate', [AssessmentPeriodController::class, 'generate']);
+            Route::post('/{period}/auto-assign', [AssessmentPeriodController::class, 'autoAssign']);
+        })->middleware('permission:assessment.manage');
 
-    // ── ارزیابی‌ها ──
-    Route::get('assessments', [AssessmentController::class, 'index'])
-        ->middleware('permission:assessment.view');
-    Route::post('assessments', [AssessmentController::class, 'store'])
-        ->middleware('permission:assessment.manage');
-    Route::post('assessments/bulk', [AssessmentController::class, 'bulkStore'])
-        ->middleware('permission:assessment.manage');
+        /* ══════════════════════════════════════════════════
+           ۳. تخصیص خودکار (Auto-Assign)
+        ══════════════════════════════════════════════════ */
+        Route::prefix('auto-assign')->group(function () {
+            Route::get('/preview', [AssessmentAssignmentController::class, 'preview']);
+            Route::post('/execute', [AssessmentAssignmentController::class, 'execute']);
+        })->middleware('permission:assessment.manage');
 
-    Route::get('assessments/{assessment}', [AssessmentController::class, 'show'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.view');
-    Route::post('assessments/{assessment}/submit', [AssessmentController::class, 'submit'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.evaluate');
-    Route::post('assessments/{assessment}/approve', [AssessmentController::class, 'approve'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.approve');
-    Route::post('assessments/{assessment}/reject', [AssessmentController::class, 'reject'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.approve');
-    Route::get('assessments/{assessment}/gaps', [AssessmentController::class, 'gaps'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.view');
-    Route::post('assessments/{assessment}/actions', [AssessmentController::class, 'storeAction'])
-        ->whereNumber('assessment')
-        ->middleware('permission:assessment.manage');
+        /* ═══════════════════════════════════════════════════
+           ۴. شناسنامه‌های شایستگی (Posts)
+        ══════════════════════════════════════════════════ */
+        Route::prefix('posts')->group(function () {
+            Route::get('/', [AssessmentController::class, 'posts']);
+            Route::post('/', [AssessmentController::class, 'storePost']);
+            Route::get('/{post}', [AssessmentController::class, 'showPost']);
+            Route::put('/{post}', [AssessmentController::class, 'updatePost']);
+            Route::delete('/{post}', [AssessmentController::class, 'destroyPost']);
+            Route::get('/{post}/questions', [AssessmentController::class, 'postQuestions']);
+        });
 
-    Route::get('categories', [AssessmentController::class, 'categories'])
-        ->middleware('permission:assessment.manage');
-    Route::post('categories', [AssessmentController::class, 'storeCategory'])
-        ->middleware('permission:assessment.manage');
+        // روت‌های عمومی‌تر برای posts (بدون middleware اضافه)
+        Route::get('suggest-post', [AssessmentController::class, 'suggestPost'])
+            ->middleware('permission:assessment.view');
 
-    Route::post('questions', [AssessmentController::class, 'storeQuestion'])
-        ->middleware('permission:assessment.manage');
-    Route::delete('questions/{question}', [AssessmentController::class, 'destroyQuestion'])
-        ->whereNumber('question')
-        ->middleware('permission:assessment.manage');
+        /* ═══════════════════════════════════════════════════
+           ۵. سوالات (Questions)
+        ══════════════════════════════════════════════════ */
+        Route::prefix('questions')->group(function () {
+            Route::post('/', [AssessmentController::class, 'storeQuestion']);
+            Route::put('/bulk', [AssessmentController::class, 'bulkUpdateQuestions']);
+            Route::put('/{question}', [AssessmentController::class, 'updateQuestion']);
+            Route::delete('/{question}', [AssessmentController::class, 'destroyQuestion']);
+        })->middleware('permission:assessment.manage');
+
+        /* ══════════════════════════════════════════════════
+           ۶. دسته‌بندی‌ها (Categories)
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('categories')->group(function () {
+            Route::get('/', [AssessmentController::class, 'categories']);
+            Route::post('/', [AssessmentController::class, 'storeCategory']);
+        })->middleware('permission:assessment.manage');
+
+        /* ═══════════════════════════════════════════════════
+           ۷. روش‌های رفع خلا (Methods)
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('methods')->group(function () {
+            Route::get('/', [AssessmentController::class, 'methods']);
+            Route::post('/', [AssessmentController::class, 'storeMethod']);
+            Route::put('/{method}', [AssessmentController::class, 'updateMethod']);
+            Route::delete('/{method}', [AssessmentController::class, 'destroyMethod']);
+        });
+
+        /* ═══════════════════════════════════════════════════
+           ۸. ارزیابی‌ها (Assessments)
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('assessments')->group(function () {
+            Route::get('/', [AssessmentController::class, 'index']);
+            Route::post('/', [AssessmentController::class, 'store']);
+            Route::post('/bulk', [AssessmentController::class, 'bulkStore']);
+            Route::get('/{assessment}', [AssessmentController::class, 'show']);
+            Route::post('/{assessment}/submit', [AssessmentController::class, 'submit']);
+            Route::post('/{assessment}/approve', [AssessmentController::class, 'approve']);
+            Route::post('/{assessment}/reject', [AssessmentController::class, 'reject']);
+            Route::get('/{assessment}/gaps', [AssessmentController::class, 'gaps']);
+            Route::post('/{assessment}/actions', [AssessmentController::class, 'storeAction']);
+        });
+
+        /* ═══════════════════════════════════════════════════
+           ۹. Import از اکسل
+        ═══════════════════════════════════════════════════ */
+        Route::prefix('import')->group(function () {
+            Route::post('/', [AssessmentController::class, 'importExcel']);
+            Route::post('/preview', [AssessmentController::class, 'importPreview']);
+            Route::post('/bulk', [AssessmentController::class, 'importBulk']);
+        })->middleware('permission:assessment.manage');
+
+        /* ═══════════════════════════════════════════════════
+           ۱۰. کاتالوگ‌های عمومی
+        ═══════════════════════════════════════════════════ */
+        Route::get('users', [AssessmentController::class, 'users'])
+            ->middleware('permission:assessment.manage');
+
+        /* ═══════════════════════════════════════════════════
+           ۱۱. گزارش‌ها و کارنامه
+        ═══════════════════════════════════════════════════ */
+        Route::get('employees/{user}/report', [AssessmentController::class, 'employeeReport'])
+            ->whereNumber('user')
+            ->middleware('permission:assessment.view');
+
+        Route::get('dashboard/stats', [AssessmentController::class, 'dashboardStats'])
+            ->middleware('permission:assessment.view');
+
+        // ═══════════════════════════════════════════════
+        // ۱۲. نگاشت دستی شناسنامه‌ها (Manual Mapping)
+        // ═══════════════════════════════════════════════
+        Route::prefix('mappings')->group(function () {
+            Route::get('/', [AssessmentMappingController::class, 'index']);
+            Route::post('/', [AssessmentMappingController::class, 'store']);
+            Route::delete('/{id}', [AssessmentMappingController::class, 'destroy']);
+            Route::put('/{id}/toggle', [AssessmentMappingController::class, 'toggle']);
+        })->middleware('permission:assessment.manage');
 
 
-    //CRUD POST
-    Route::post('posts', [AssessmentController::class, 'storePost'])
-        ->middleware('permission:assessment.manage');
-    Route::put('posts/{post}', [AssessmentController::class, 'updatePost'])
-        ->whereNumber('post')
-        ->middleware('permission:assessment.manage');
-    Route::delete('posts/{post}', [AssessmentController::class, 'destroyPost'])
-        ->whereNumber('post')
-        ->middleware('permission:assessment.manage');
+        Route::prefix('mappings')->group(function () {
+            Route::get('/', [AssessmentMappingController::class, 'index']);
+            Route::post('/', [AssessmentMappingController::class, 'store']);
+            Route::delete('/{id}', [AssessmentMappingController::class, 'destroy']);
+            Route::put('/{id}/toggle', [AssessmentMappingController::class, 'toggle']);
 
-    Route::get('suggest-post', [AssessmentController::class, 'suggestPost'])
-        ->middleware('permission:assessment.manage');
+            // ✅ route های جدید
+            Route::get('/no-evaluator', [AssessmentMappingController::class, 'noEvaluator']);
+            Route::post('/assign-evaluator', [AssessmentMappingController::class, 'assignEvaluator']);
+        })->middleware('permission:assessment.manage');
 
 
-    Route::post('methods', [AssessmentController::class, 'storeMethod'])
-        ->middleware('permission:assessment.manage');
-    Route::put('methods/{method}', [AssessmentController::class, 'updateMethod'])
-        ->whereNumber('method')
-        ->middleware('permission:assessment.manage');
-    Route::delete('methods/{method}', [AssessmentController::class, 'destroyMethod'])
-        ->whereNumber('method')
-        ->middleware('permission:assessment.manage');
 
-    Route::get('employees/{user}/report', [AssessmentController::class, 'employeeReport'])
-        ->whereNumber('user')
-        ->middleware('auth:sanctum');
 
-    //auto assessment
-    Route::post('/', [AssessmentPeriodController::class, 'store'])->name('store');
-    Route::post('/{period}/generate', [AssessmentPeriodController::class, 'generate'])->name('generate');
-    Route::get('/{period}', [AssessmentPeriodController::class, 'show'])->name('show');
-
-    Route::get('auto-assign/preview', [AssessmentAssignmentController::class, 'preview'])
-        ->middleware('permission:assessment.manage');
-    Route::post('auto-assign/execute', [AssessmentAssignmentController::class, 'execute'])
-        ->middleware('permission:assessment.manage');
-
-    Route::post('/periods/{period}/auto-assign', [AssessmentController::class, 'autoAssign'])
-        ->middleware('permission:assessment.manage')
-        ->name('periods.auto-assign');
-
-});
+    });

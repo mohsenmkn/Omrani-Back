@@ -1,180 +1,170 @@
 <?php
-
-
 namespace Modules\Assessment\App\Services;
 
-use Illuminate\Support\Facades\DB;
 use Modules\Assessment\App\Models\Assessment;
-use Modules\Assessment\App\Models\AssessmentCycle;
+use Modules\Assessment\App\Models\AssessmentAnswer;
+use Modules\Assessment\App\Models\AssessmentGap;
 use Modules\Assessment\App\Models\AssessmentQuestion;
-use Modules\Auth\App\Models\User;
 
 class AssessmentService
 {
-    // ────────────── چرخه ──────────────
-
-    public function createCycle(array $data): AssessmentCycle
-    {
-        return AssessmentCycle::create([
-            'title' => $data['title'],
-            'type' => $data['type'] ?? 'annual',
-            'start_date' => $data['start_date'] ?? null,
-            'end_date' => $data['end_date'] ?? null,
-            'description' => $data['description'] ?? null,
-            'status' => AssessmentCycle::STATUS_DRAFT,
-        ]);
-    }
-
-    public function setCycleStatus(AssessmentCycle $cycle, string $status): AssessmentCycle
-    {
-        $cycle->update(['status' => $status]);
-        return $cycle;
-    }
-
-    // ────────────── ایجاد ارزیابی ──────────────
-
-    public function createAssessment(int $employeeUserId, int $postId, int $evaluatorUserId, ?int $cycleId = null): Assessment
-    {
-        return Assessment::create([
-            'cycle_id' => $cycleId,
-            'employee_user_id' => $employeeUserId,
-            'post_id' => $postId,
-            'evaluator_user_id' => $evaluatorUserId,
-            'status' => Assessment::STATUS_DRAFT,
-        ]);
-    }
-
     /**
-     * ایجاد گروهی ارزیابی (برای یک پست + ارزیاب + لیست کارکنان)
+     * ثبت پاسخ‌های ارزیابی
      */
-    public function bulkCreate(int $postId, int $evaluatorUserId, ?int $cycleId, array $employeeUserIds): array
+    public function submitAnswers(Assessment $assessment, array $answers): void
     {
-        $created = 0;
-        $skipped = 0;
-
-        foreach ($employeeUserIds as $uid) {
-            $exists = Assessment::where('employee_user_id', $uid)
-                ->where('post_id', $postId)
-                ->when($cycleId, fn($q) => $q->where('cycle_id', $cycleId))
-                ->exists();
-
-            if ($exists) {
-                $skipped++;
-                continue;
-            }
-
-            $this->createAssessment($uid, $postId, $evaluatorUserId, $cycleId);
-            $created++;
+        foreach ($answers as $questionId => $data) {
+            AssessmentAnswer::updateOrCreate(
+                [
+                    'assessment_id' => $assessment->id,
+                    'question_id' => $questionId,
+                ],
+                [
+                    'score' => $data['score'] ?? null,
+                    'comment' => $data['comment'] ?? null,
+                ]
+            );
         }
 
-        return ['created' => $created, 'skipped' => $skipped];
+        // محاسبه گپ‌ها
+        $this->calculateGaps($assessment);
+
+        // تغییر وضعیت به submitted
+        $assessment->update(['status' => Assessment::STATUS_SUBMITTED]);
     }
 
-    // ────────────── فرم ارزیابی ──────────────
+    /**
+     * محاسبه گپ‌ها بر اساس پاسخ‌ها
+     */
+    private function calculateGaps(Assessment $assessment): void
+    {
+        // حذف گپ‌های قبلی
+        $assessment->gaps()->delete();
+
+        $answers = $assessment->answers()->with('question')->get();
+
+        foreach ($answers as $answer) {
+            $required = $answer->question->effective_required_score ?? 5;
+            $actual = $answer->score ?? 0;
+            $gap = max(0, $required - $actual);
+
+            if ($gap > 0) {
+                AssessmentGap::create([
+                    'assessment_id' => $assessment->id,
+                    'question_id' => $answer->question_id,
+                    'required_score' => $required,
+                    'actual_score' => $actual,
+                    'gap' => $gap,
+                    'weighted_gap' => $gap * ($answer->question->risk_level ?? 1),
+                    'fix_deadline' => $answer->question->fix_deadline,
+                    'status' => AssessmentGap::STATUS_OPEN,
+                ]);
+            }
+        }
+    }
 
     /**
-     * سوالات پست به تفکیک منظر + نمره ثبت‌شده (اگر باشد)
+     * تایید ارزیابی
+     */
+    public function approve(Assessment $assessment, int $approvedBy): void
+    {
+        $assessment->update([
+            'status' => Assessment::STATUS_APPROVED,
+            'approved_at' => now(),
+            'approved_by' => $approvedBy,
+        ]);
+    }
+
+    /**
+     * رد ارزیابی
+     */
+    public function reject(Assessment $assessment, string $notes = ''): void
+    {
+        $assessment->update([
+            'status' => Assessment::STATUS_REJECTED,
+            'notes' => $notes,
+        ]);
+    }
+
+    /**
+     * دریافت فرم ارزیابی با تمام داده‌های مورد نیاز
+     *
+     * @param int $assessmentId
+     * @return array
+     */
+    /**
+     * دریافت فرم ارزیابی با تمام داده‌های مورد نیاز
+     *
+     * @param Assessment $assessment (تغییر از int به Assessment)
+     * @return array
+     */
+    /**
+     * دریافت فرم ارزیابی با سوالات مربوط به شناسنامه شغل
+     *
+     * @param Assessment $assessment
+     * @return array
      */
     public function getForm(Assessment $assessment): array
     {
-        $questions = AssessmentQuestion::where('post_id', $assessment->post_id)
-            ->where('is_active', true)
-            ->with('category')
-            ->orderBy('sort_order')
-            ->get()
-            ->groupBy('category_id');
+        // لود کردن روابط مورد نیاز
+        $assessment->load([
+            'employee',
+            'evaluator',
+            'post',
+            'cycle',
+            'answers',
+        ]);
 
-        $answers = $assessment->answers()->pluck('score', 'question_id');
+        $post = $assessment->post;
 
-        return $questions->map(function ($group, $catId) use ($answers) {
-            return [
-                'id' => $catId,
-                'title' => $group->first()->category?->title,
-                'questions' => $group->map(fn($q) => [
-                    'id' => $q->id,
-                    'title' => $q->title,
-                    'required_score' => $q->required_score,
-                    'risk_level' => $q->risk_level,
-                    'score' => $answers[$q->id] ?? null,
-                ])->values(),
-            ];
-        })->values()->toArray();
-    }
-
-    // ────────────── ثبت نمرات + محاسبه گپ ──────────────
-
-    public function submitAnswers(Assessment $assessment, array $scores): Assessment
-    {
-        if ($assessment->status === Assessment::STATUS_APPROVED) {
-            throw new \RuntimeException('ارزیابی تاییدشده قابل ویرایش نیست.');
+        if (!$post) {
+            throw new \Exception('شناسنامه شایستگی برای این ارزیابی یافت نشد');
         }
 
-        $questions = AssessmentQuestion::where('post_id', $assessment->post_id)
-            ->get()->keyBy('id');
+        // ✅ دریافت سوالات فقط برای این شناسنامه (post_id)
+        $questions = \Modules\Assessment\App\Models\AssessmentQuestion::where('post_id', $post->id)
+            ->with('category')
+            ->orderBy('category_id')
+            ->orderBy('id')
+            ->get();
 
-        DB::transaction(function () use ($assessment, $scores, $questions) {
-            foreach ($scores as $questionId => $score) {
-                $q = $questions[$questionId] ?? null;
-                if (!$q) continue;
+        // ✅ گروه‌بندی سوالات بر اساس دسته‌بندی (منظر)
+        $categories = $questions->groupBy('category.title')->map(function ($group, $categoryTitle) use ($assessment) {
+            return [
+                'id' => $group->first()->category?->id,
+                'title' => $categoryTitle ?? 'سایر',
+                'questions' => $group->map(function ($question) use ($assessment) {
+                    // بررسی نمره قبلی (اگر ارزیابی قبلاً شروع شده)
+                    $existingAnswer = $assessment->answers->firstWhere('question_id', $question->id);
 
-                $score = (int)$score;
-                if ($score < 1 || $score > 5) continue;
+                    return [
+                        'id' => $question->id,
+                        'title' => $question->title,
+                        'required_score' => $question->required_score,
+                        'risk_level' => $question->risk_level,
+                        'fix_deadline' => $question->fix_deadline,
+                        'score' => $existingAnswer?->score,
+                        'comment' => $existingAnswer?->comment,
+                    ];
+                })->values(),
+            ];
+        })->values();
 
-                $assessment->answers()->updateOrCreate(
-                    ['question_id' => $q->id],
-                    ['score' => $score]
-                );
+        // محاسبه آمار
+        $totalQuestions = $questions->count();
+        $answeredQuestions = $questions->filter(function ($q) use ($assessment) {
+            return $assessment->answers->contains('question_id', $q->id);
+        })->count();
 
-                // ── محاسبه گپ ──
-                $gap = max(0, ($q->required_score ?? 5) - $score);
-                $weight = $q->risk_level ?? $q->required_score ?? 5;
-
-                if ($gap > 0) {
-                    $assessment->gaps()->updateOrCreate(
-                        ['question_id' => $q->id],
-                        [
-                            'required_score' => $q->required_score,
-                            'actual_score' => $score,
-                            'gap' => $gap,
-                            'weighted_gap' => $gap * $weight,
-                            'fix_deadline' => $q->fix_deadline,
-                            'status' => 'open',
-                        ]
-                    );
-                } else {
-                    $assessment->gaps()->where('question_id', $q->id)->delete();
-                }
-            }
-
-            $assessment->update([
-                'status' => Assessment::STATUS_SUBMITTED,
-                'submitted_at' => now(),
-            ]);
-        });
-
-        return $assessment->fresh();
+        return [
+            'assessment' => $assessment,
+            'categories' => $categories,
+            'stats' => [
+                'total_questions' => $totalQuestions,
+                'answered_questions' => $answeredQuestions,
+                'completion' => $totalQuestions > 0 ? round(($answeredQuestions / $totalQuestions) * 100) : 0,
+            ],
+        ];
     }
 
-    // ────────────── تایید / رد ──────────────
-
-    public function approve(Assessment $a, User $approver): Assessment
-    {
-        $a->update([
-            'status' => Assessment::STATUS_APPROVED,
-            'approved_by' => $approver->id,
-            'approved_at' => now(),
-        ]);
-        return $a;
-    }
-
-    public function reject(Assessment $a, User $approver, ?string $notes = null): Assessment
-    {
-        $a->update([
-            'status' => Assessment::STATUS_REJECTED,
-            'approved_by' => $approver->id,
-            'approved_at' => now(),
-            'notes' => $notes,
-        ]);
-        return $a;
-    }
 }
